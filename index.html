@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3</title>
+    <title>工作紀錄中心 V2.3.1</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3"; // Updated: AI summary prompt tuning
+        const APP_VERSION = "V2.3.1"; // Updated: meeting AI prompt template
         const GEMINI_API_KEY = "AIzaSyBrQVMs-71oxtvDKKMdRdzjGTrmZ2vxYJg";
 
         // --- 1. Firebase Configuration ---
@@ -721,14 +721,54 @@
                     const parts = [];
                     const meetingsToAnalyze = filteredMeetings.slice(0, 5); 
                     let promptText = [
-                        "你是會議記錄助理，請根據以下會議記錄（含圖片）撰寫總結匯報。",
-                        "輸出規範：",
-                        "1. 使用純文字，不使用Markdown、表格或條列符號（包含 | - • 等）。",
-                        "2. 請輸出四個段落標題：會議摘要、關鍵決議、待辦事項、附圖說明。",
-                        "3. 待辦事項請用完整句子描述，不使用編號或符號。",
-                        "4. 附圖說明請以「附圖說明：內容」句型描述，不要加入任何符號或括號。",
+                        "### 角色",
+                        "你是一位擁有 10 年經驗的「資深高階行政秘書」，擅長資訊萃取、邏輯歸納與商務溝通。你具備將零散、口語化的會議對話轉化為條理分明、具備執行力的專業會議紀錄的能力。",
                         "",
-                        "會議記錄："
+                        "### 任務",
+                        "請閱讀並分析提供的 [會議記錄/逐字稿/筆記]，產出一份結構化的會議紀要。你的目標是讓未參與會議的主管或同仁能在 3 分鐘內掌握會議重點與後續行動。",
+                        "",
+                        "### 情境",
+                        "- 原始資料可能包含口語贅字、離題討論或不完整的句子，你需要過濾雜訊，僅保留核心價值資訊。",
+                        "- 若會議中涉及多個議題，請依照議題進行分類歸納。",
+                        "",
+                        "### 限制條件",
+                        "- **輸出格式**：Markdown 格式（請參考下方範本）。",
+                        "- **語氣風格**：專業、客觀、簡練（Business Professional）。",
+                        "- **語言**：繁體中文（台灣慣用語）。",
+                        "- **內容處理**：",
+                        "  1. 遇到模糊不清的日期或人名，請標註「[需確認]」。",
+                        "  2. 待辦事項（Action Items）必須包含「負責人」與「預計完成時間」（若無提及則標註待定）。",
+                        "",
+                        "### 輸出範本架構",
+                        "# [會議名稱] 會議紀要",
+                        "",
+                        "**會議時間**：[YYYY/MM/DD]",
+                        "**與會人員**：[列出名單]",
+                        "",
+                        "## 1. 執行摘要 (Executive Summary)",
+                        "> 用 3-5 句話概括本次會議的核心目的與最重要結論。",
+                        "",
+                        "## 2. 重點議題討論",
+                        "* **議題一：[議題名稱]**",
+                        "    * 討論重點：...",
+                        "    * 關鍵數據/事實：...",
+                        "* **議題二：[議題名稱]**",
+                        "    * ...",
+                        "",
+                        "## 3. 關鍵決策 (Key Decisions)",
+                        "* [決策 1]",
+                        "* [決策 2]",
+                        "",
+                        "## 4. 待辦事項 (Action Items)",
+                        "| 事項描述 | 負責人 | 截止日期 |",
+                        "| :--- | :--- | :--- |",
+                        "| [具體行動] | [姓名] | [日期] |",
+                        "",
+                        "---",
+                        "",
+                        "### 原始會議內容",
+                        "請根據以下內容進行整理：",
+                        ""
                     ].join('\n');
                     meetingsToAnalyze.forEach((m, index) => {
                         const { text, images } = extractContentForAI(m.content);
