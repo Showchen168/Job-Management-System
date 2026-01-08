@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作紀錄中心 V2.2.5</title>
+    
+    <!-- 1. 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+
+    <!-- 2. 引入 React 和 Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 設定 Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Microsoft JhengHei', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; }
+        #root { min-height: 100vh; }
+        .loading-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #64748b;
+            font-family: sans-serif;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .error-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fee2e2;
+            color: #b91c1c;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #fca5a5;
+            z-index: 9999;
+            max-width: 90%;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loading-container">
+            <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <div>系統載入中...</div>
+        </div>
+    </div>
+    <div id="global-error" style="display:none;" class="error-box"></div>
+
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorDiv = document.getElementById('global-error');
+            errorDiv.style.display = 'block';
+            errorDiv.innerHTML = `<strong>系統發生錯誤:</strong><br/>${message}`;
+            console.error('Global Error:', error);
+        };
+    </script>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        
+        import { initializeApp, getApps, getApp, deleteApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getFirestore, collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { 
+            getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        import { 
+            CheckCircle2, Clock, AlertCircle, Calendar, Users, FileText, Settings, Plus, Save, X, Edit2, Trash2, Link as LinkIcon, ChevronRight, Database, RefreshCw, Check, ShieldAlert, Download, List, Search, ArrowRightLeft, LogIn, LogOut, UserPlus, Loader2, ExternalLink, ShieldCheck, Lock, UserCog, Image as ImageIcon, Info, User, Filter, Briefcase, LayoutDashboard, BarChart3, PieChart, Activity, Sparkles, Bot, Copy 
+        } from 'https://esm.sh/lucide-react@0.294.0';
+
+        // --- 0. System Constants ---
+        const SYSTEM_CREATOR = "Show";
+        const APP_VERSION = "V2.2.5"; // Updated: Fix AI Cleanup & Copy Button
+        const GEMINI_API_KEY = "AIzaSyDf1uvdBH1Sgi5Xj48jsUdGOnkO4hYsxHQ";
+
+        // --- 1. Firebase Configuration ---
+        const DEFAULT_CONFIG = {
+            apiKey: "AIzaSyAGezrKXfKSwvh1Aauy-wrTr53e_WtuXVE",
+            authDomain: "job-management-system-16741.firebaseapp.com",
+            projectId: "job-management-system-16741",
+            storageBucket: "job-management-system-16741.firebasestorage.app",
+            messagingSenderId: "1042345096032",
+            appId: "1:1042345096032:web:853c2d9c35c06b7dd9a405",
+            measurementId: "G-FM8QW4LJ2T"
+        };
+
+        const ROOT_ADMINS = [
+            "showchen@aivres.com",
+        ];
+
+        const checkIsAdmin = (user, cloudAdmins = []) => {
+            if (!user || !user.email) return false;
+            return ROOT_ADMINS.includes(user.email) || cloudAdmins.includes(user.email);
+        };
+
+        // --- Helper Functions ---
+        const callGeminiAI = async (contentParts) => {
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+            try {
+                const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: contentParts }] })
+                });
+                if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'API request failed');
+                }
+                const data = await response.json();
+                return data.candidates[0].content.parts[0].text;
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                throw error;
+            }
+        };
+
+        const cleanAIResponse = (text) => {
+            if (!text) return "";
+            return text
+                .replace(/(\*\*|__)(.*?)\1/g, '$2') // 移除粗體/斜體標記
+                .replace(/^#+\s+/gm, '')           // 移除標題標記 (#, ##, ###)
+                .replace(/`/g, '')                 // 移除代碼塊符號
+                .trim();
+        };
+
+        const copyToClipboard = (text) => {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(err => {
+                    console.error('Async: Could not copy text: ', err);
+                    fallbackCopyTextToClipboard(text);
+                });
+            } else {
+                fallbackCopyTextToClipboard(text);
+            }
+        };
+
+        const fallbackCopyTextToClipboard = (text) => {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+        };
+
+        const extractContentForAI = (htmlContent) => {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const text = tempDiv.textContent || tempDiv.innerText || "";
+            const images = [];
+            const imgTags = tempDiv.getElementsByTagName('img');
+            for (let i = 0; i < imgTags.length; i++) {
+                const src = imgTags[i].src;
+                if (src.startsWith('data:image/')) {
+                    const parts = src.split(',');
+                    if (parts.length === 2) {
+                        const mimeMatch = parts[0].match(/:(.*?);/);
+                        if (mimeMatch) {
+                            images.push({ inlineData: { mimeType: mimeMatch[1], data: parts[1] } });
+                        }
+                    }
+                }
+            }
+            return { text, images };
+        };
+
+        const exportToCSV = (data, filename, headers) => {
+            if (!data || !data.length) return;
+            const bom = '\uFEFF';
+            const csvContent = [
+                headers.map(h => h.label).join(','),
+                ...data.map(row => 
+                headers.map(h => {
+                    let val = row[h.key] || '';
+                    if (h.key === 'content' && typeof val === 'string') val = val.replace(/<[^>]+>/g, '');
+                    if (typeof val === 'string' && (val.includes(',') || val.includes('\n'))) val = `"${val.replace(/"/g, '""')}"`;
+                    return val;
+                }).join(',')
+                )
+            ].join('\n');
+            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const compressImage = (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const MAX_WIDTH = 800;
+                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(0, 0, width, height);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                };
+            });
+        };
+
+        // --- 2. Base Components (Defined First) ---
+
+        const Modal = ({ isOpen, title, content, onConfirm, onCancel, confirmText = '確認', cancelText = '取消', type = 'confirm', children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden transform scale-100 transition-all flex flex-col max-h-[90vh]">
+                    <div className="p-6 flex-shrink-0">
+                    <div className="flex items-center gap-3 mb-3">
+                        {type === 'danger' && <div className="p-2 bg-red-100 rounded-full text-red-600"><AlertCircle size={24} /></div>}
+                        {type === 'confirm' && <div className="p-2 bg-blue-100 rounded-full text-blue-600"><Info size={24} /></div>}
+                        {type === 'ai' && <div className="p-2 bg-purple-100 rounded-full text-purple-600"><Bot size={24} /></div>}
+                        <h3 className={`text-lg font-bold ${type === 'danger' ? 'text-red-700' : 'text-slate-800'}`}>{title}</h3>
+                    </div>
+                    {content && <p className="text-slate-600 text-sm leading-relaxed ml-1 whitespace-pre-wrap">{content}</p>}
+                    {children}
+                    </div>
+                    <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 flex-shrink-0">
+                    {onCancel && <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">{cancelText}</button>}
+                    <button onClick={onConfirm} className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-colors ${type === 'danger' ? 'bg-red-600 hover:bg-red-700' : type === 'ai' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}>{confirmText}</button>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        // 新增: CopyButton Component - 提供視覺回饋
+        const CopyButton = ({ text }) => {
+            const [copied, setCopied] = useState(false);
+            const handleCopy = () => {
+                copyToClipboard(text);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+            return (
+                <button 
+                    onClick={handleCopy}
+                    className={`mt-3 flex items-center gap-2 text-sm font-medium transition-colors ${copied ? 'text-green-600' : 'text-purple-600 hover:underline'}`}
+                >
+                    {copied ? <Check size={16} /> : <Copy size={16} />} 
+                    {copied ? '已複製成功！' : '複製報告內容'}
+                </button>
+            );
+        };
+
+        const NavButton = ({ active, onClick, icon, label }) => (
+            <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>{icon}<span className="font-medium">{label}</span></button>
+        );
+
+        const ContentEditor = ({ value, onChange }) => {
+            const editableRef = useRef(null);
+            useEffect(() => {
+                if (editableRef.current && editableRef.current.innerHTML !== value) {
+                    editableRef.current.innerHTML = value || '';
+                }
+            }, [value]);
+            const handlePaste = async (e) => {
+                const items = e.clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.indexOf('image') !== -1) {
+                        e.preventDefault();
+                        const file = items[i].getAsFile();
+                        const base64 = await compressImage(file);
+                        if (base64.length > 800 * 1024) { alert("圖片過大"); return; }
+                        document.execCommand('insertImage', false, base64);
+                    }
+                }
+            };
+            const handleInput = (e) => onChange(e.currentTarget.innerHTML);
+            return (
+                <div className="w-full p-3 border border-slate-300 rounded min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-emerald-500 prose prose-sm max-w-none bg-slate-50" contentEditable ref={editableRef} onInput={handleInput} onPaste={handlePaste} data-placeholder="請輸入會議內容，可直接貼上圖片..." />
+            );
+        };
+
+        // --- 3. Sub-Components (Tasks & Meetings) ---
+
+        const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses }) => {
+            const [formData, setFormData] = useState({
+                title: '', status: 'Pending', source: '', assignedDate: new Date().toISOString().split('T')[0], dueDate: '', delayReason: '', progress: '', ...initialData
+            });
+            const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+            return (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-blue-100 mb-6">
+                <h3 className="font-bold text-lg mb-4 text-slate-700">{initialData ? '編輯事項' : '新增事項'}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">事項內容 <span className="text-red-500">*</span></label><input name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">來源 <span className="text-red-500">*</span></label><select name="source" value={formData.source} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇來源</option>{taskSources.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">狀態 <span className="text-red-500">*</span></label><select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">交辦日期 <span className="text-red-500">*</span></label><input type="date" name="assignedDate" value={formData.assignedDate} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">預計完成 <span className="text-red-500">*</span></label><input type="date" name="dueDate" value={formData.dueDate} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">進展更新 <span className="text-red-500">*</span></label><textarea name="progress" value={formData.progress} onChange={handleChange} rows="2" className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 text-slate-400">延遲原因 (選填)</label><input name="delayReason" value={formData.delayReason} onChange={handleChange} className="w-full p-2 border border-slate-200 bg-slate-50 rounded" placeholder="非必填" /></div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6"><button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">取消</button><button onClick={() => onSave(formData)} className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"><Save size={18} /> 儲存</button></div>
+                </div>
+            );
+        };
+
+        const TaskRow = ({ task, onEdit, onDelete }) => {
+            const getStatusColor = (status) => {
+                const s = status.toLowerCase();
+                if (s.includes('done') || s.includes('complete') || s.includes('完成')) return 'bg-green-100 text-green-700 border-green-200';
+                if (s.includes('on-going') || s.includes('process') || s.includes('進行')) return 'bg-blue-100 text-blue-700 border-blue-200';
+                if (s.includes('pending') || s.includes('wait') || s.includes('待')) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                return 'bg-gray-100 text-gray-700 border-gray-200';
+            };
+            return (
+                <tr className="hover:bg-slate-50 transition-colors">
+                <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(task.status)}`}>{task.status}</span></td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.source || '-'}</td>
+                <td className="px-6 py-4">
+                    <div className="font-medium text-slate-800 max-w-xs truncate" title={task.title}>{task.title}</div>
+                    {task.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {task.createdByEmail}</div>}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">{task.assignedDate}</td>
+                <td className="px-6 py-4 whitespace-nowrap"><span className={task.dueDate && new Date(task.dueDate) < new Date() && !task.status.toLowerCase().includes('done') ? 'text-red-600 font-bold' : ''}>{task.dueDate || '-'}</span></td>
+                <td className="px-6 py-4 max-w-xs"><div className="flex flex-col gap-1">{task.progress && <div className="text-xs text-slate-600 truncate" title={task.progress}>{task.progress}</div>}{task.delayReason && (<div className="flex items-center gap-1 text-xs text-red-500 truncate" title={task.delayReason}><AlertCircle size={12} /> {task.delayReason}</div>)}</div></td>
+                <td className="px-6 py-4 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"><Edit2 size={16} /></button><button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"><Trash2 size={16} /></button></div></td>
+                </tr>
+            );
+        };
+
+        const MeetingForm = ({ initialData, onSave, onCancel, categories }) => {
+            const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], host: '', attendees: '', topic: '', content: '', category: categories[0] || '', ...initialData });
+            const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+            const handleContentChange = (newContent) => setFormData(prev => ({ ...prev, content: newContent }));
+            return (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mb-6">
+                <h3 className="font-bold text-lg mb-4 text-slate-700">{initialData ? '編輯會議記錄' : '新增會議記錄'}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">主題 <span className="text-red-500">*</span></label><input name="topic" value={formData.topic} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">分類 <span className="text-red-500">*</span></label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇分類</option>{categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">日期 <span className="text-red-500">*</span></label><input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">主持人 <span className="text-red-500">*</span></label><input name="host" value={formData.host} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">參會人員 <span className="text-red-500">*</span></label><input name="attendees" value={formData.attendees} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center justify-between"><span>內容 (支援圖片貼上) <span className="text-red-500">*</span></span><span className="text-[10px] font-normal text-slate-400 flex items-center gap-1"><ImageIcon size={10}/> 貼上截圖會自動壓縮</span></label><ContentEditor value={formData.content} onChange={handleContentChange} /></div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6"><button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">取消</button><button onClick={() => onSave(formData)} className="px-6 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-2"><Save size={18} /> 儲存</button></div>
+                </div>
+            );
+        };
+
+        const MeetingRow = ({ meeting, onEdit, onDelete }) => {
+            const [expanded, setExpanded] = useState(false);
+            return (
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden group">
+                <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50" onClick={() => setExpanded(!expanded)}>
+                    <div className="flex items-center gap-4 flex-1">
+                    <div className="flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 w-16 h-16 rounded-lg border border-emerald-100 flex-shrink-0"><span className="text-xs font-bold uppercase">{new Date(meeting.date).toLocaleString('default', { month: 'short' })}</span><span className="text-xl font-bold">{new Date(meeting.date).getDate()}</span></div>
+                    <div><div className="flex items-center gap-2">{meeting.category && <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">{meeting.category}</span>}<h3 className="font-bold text-slate-800">{meeting.topic}</h3></div><p className="text-sm text-slate-500 flex gap-2 mt-1"><span>{meeting.host}</span><span>•</span><span className="line-clamp-1 max-w-[200px]">{meeting.attendees}</span></p>{meeting.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {meeting.createdByEmail}</div>}</div>
+                    </div>
+                    <div className="flex items-center gap-4"><ChevronRight size={20} className={`text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} /></div>
+                </div>
+                {expanded && (
+                    <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50">
+                    <div className="mt-4 text-sm text-slate-700 leading-relaxed bg-white p-4 rounded border border-slate-200 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: meeting.content || "無詳細內容" }} />
+                    <div className="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3"><button onClick={onEdit} className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600">編輯</button><button onClick={onDelete} className="px-3 py-1.5 text-sm bg-red-50 border border-red-200 rounded hover:bg-red-100 text-red-600">刪除</button></div>
+                    </div>
+                )}
+                </div>
+            );
+        };
+
+        // --- 4. Page Components (AuthPage Defined Here) ---
+        
+        const AuthPage = ({ auth, error }) => {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [authError, setAuthError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                setLoading(true);
+                try {
+                    if (isLogin) {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    } else {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                    }
+                } catch (err) {
+                    console.error("Auth Error:", err);
+                    let msg = err.message;
+                    if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') msg = '帳號或密碼錯誤';
+                    if (err.code === 'auth/email-already-in-use') msg = '此 Email 已被註冊';
+                    if (err.code === 'auth/weak-password') msg = '密碼太短 (至少6位)';
+                    if (err.code === 'auth/operation-not-allowed') msg = '系統錯誤：請聯繫管理員開啟 Email 登入功能';
+                    setAuthError(msg);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+                <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
+                    <div className="bg-slate-900 p-8 text-center">
+                    <div className="inline-flex p-3 bg-blue-600 rounded-full mb-4 shadow-lg">
+                        <Database size={32} className="text-white" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-white mb-2">工作紀錄中心</h1>
+                    <p className="text-slate-400 text-sm">請登入以存取您的工作資料</p>
+                    </div>
+                    <div className="p-8">
+                    {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label><input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">密碼</label><input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                        {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
+                        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}</button>
+                    </form>
+                    <div className="mt-6 text-center text-sm text-slate-500">{isLogin ? '還沒有帳號？' : '已經有帳號了？'}<button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="ml-2 text-blue-600 font-bold hover:underline">{isLogin ? '立即註冊' : '返回登入'}</button></div>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const Dashboard = ({ db, user, isAdmin }) => {
+            const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {} });
+            const [meetingStats, setMeetingStats] = useState({ total: 0, byCategory: {} });
+
+            useEffect(() => {
+                if (!db || !user) return;
+                const qTasks = isAdmin 
+                    ? query(collectionGroup(db, 'tasks')) 
+                    : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
+                const unsubTasks = onSnapshot(qTasks, (snapshot) => {
+                    let t = 0; let sources = {}; let statuses = {};
+                    snapshot.forEach(doc => {
+                        const data = doc.data(); t++;
+                        const status = data.status || '未定義'; statuses[status] = (statuses[status] || 0) + 1;
+                        const src = data.source || '未分類'; sources[src] = (sources[src] || 0) + 1;
+                    });
+                    setTaskStats({ total: t, byStatus: statuses, bySource: sources });
+                });
+                const qMeetings = isAdmin
+                    ? query(collectionGroup(db, 'meetings'))
+                    : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings'));
+                const unsubMeetings = onSnapshot(qMeetings, (snapshot) => {
+                    let t = 0; let cats = {};
+                    snapshot.forEach(doc => {
+                        const data = doc.data(); t++;
+                        const c = data.category || '未分類'; cats[c] = (cats[c] || 0) + 1;
+                    });
+                    setMeetingStats({ total: t, byCategory: cats });
+                });
+                return () => { unsubTasks(); unsubMeetings(); };
+            }, [db, user, isAdmin]);
+
+            return (
+                <div className="space-y-6 animate-in fade-in">
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> 數據看板</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View (All Data)</span>}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><div className="text-slate-500 text-sm font-bold uppercase mb-2">總待辦事項</div><div className="text-4xl font-bold text-slate-800">{taskStats.total}</div></div>
+                        {Object.entries(taskStats.byStatus).slice(0, 3).map(([status, count], i) => {
+                            const colors = ['bg-yellow-50 border-yellow-200 text-yellow-800', 'bg-blue-50 border-blue-200 text-blue-800', 'bg-green-50 border-green-200 text-green-800'];
+                            return (<div key={status} className={`p-6 rounded-xl shadow-sm border ${colors[i % colors.length]}`}><div className="text-sm font-bold uppercase mb-2 opacity-80">{status}</div><div className="text-4xl font-bold">{count}</div></div>);
+                        })}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart3 size={20}/> 待辦事項來源分析</h3>
+                            <div className="space-y-3">{Object.keys(taskStats.bySource).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(taskStats.bySource).map(([src, count]) => (<div key={src}><div className="flex justify-between text-sm mb-1"><span className="text-slate-600">{src}</span><span className="font-bold text-slate-800">{count}</span></div><div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(count / taskStats.total) * 100}%` }}></div></div></div>))}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={20}/> 會議類型統計</h3>
+                            <div className="flex items-center justify-between mb-6"><div><div className="text-3xl font-bold text-slate-800">{meetingStats.total}</div><div className="text-xs text-slate-500">總會議場次</div></div><div className="p-3 bg-emerald-100 rounded-full text-emerald-600"><Users size={24}/></div></div>
+                            <div className="space-y-2">{Object.keys(meetingStats.byCategory).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(meetingStats.byCategory).map(([cat, count]) => (<div key={cat} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100"><span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>{cat}</span><span className="font-mono font-bold text-slate-700">{count}</span></div>))}</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TaskManager = ({ db, user, isAdmin }) => {
+            const [tasks, setTasks] = useState([]);
+            const [filteredTasks, setFilteredTasks] = useState([]);
+            const [isEditing, setIsEditing] = useState(false);
+            const [currentTask, setCurrentTask] = useState(null);
+            const [modalConfig, setModalConfig] = useState({ isOpen: false });
+            const [taskSources, setTaskSources] = useState(['Email', 'Meeting', 'Chat', 'Other']);
+            const [taskStatuses, setTaskStatuses] = useState(['Pending', 'On-going', 'Done']);
+            const isRootAdmin = ROOT_ADMINS.includes(user?.email);
+            const [aiLoading, setAiLoading] = useState(false);
+            const [aiReport, setAiReport] = useState('');
+            const [filterStatus, setFilterStatus] = useState('All');
+            const [searchQuery, setSearchQuery] = useState('');
+            
+            useEffect(() => {
+                if (!db || !user) return;
+                const q = isAdmin 
+                    ? query(collectionGroup(db, 'tasks'))
+                    : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
+                data.sort((a, b) => { const ta = a.createdAt?.seconds || 0; const tb = b.createdAt?.seconds || 0; return tb - ta; });
+                setTasks(data);
+                }, (error) => console.error("Error tasks:", error));
+                return () => unsubscribe();
+            }, [db, user, isAdmin]);
+
+            useEffect(() => {
+                if (!db) return;
+                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+                    if (docSnap.exists()) { const data = docSnap.data(); if (data.taskSources) setTaskSources(data.taskSources); if (data.taskStatuses) setTaskStatuses(data.taskStatuses); }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
+                let res = tasks;
+                if (filterStatus !== 'All') { res = res.filter(t => t.status === filterStatus); }
+                if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(t => t.title.toLowerCase().includes(lowerQ) || (t.createdByEmail && t.createdByEmail.toLowerCase().includes(lowerQ))); }
+                setFilteredTasks(res);
+            }, [tasks, filterStatus, searchQuery]);
+
+            const handleGenerateReport = async () => {
+                if (!filteredTasks.length) { setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
+                setAiLoading(true);
+                setModalConfig({ isOpen: true, type: 'ai', title: 'AI 正在思考中...', content: '正在撰寫報告...', onConfirm: null, confirmText: "", onCancel: null });
+                const taskData = filteredTasks.map(t => `- [${t.status}] ${t.title} (Owner: ${t.createdByEmail || 'Unknown'}, 截止: ${t.dueDate})`).join('\n');
+                const prompt = `請根據以下待辦事項清單(含不同負責人)，撰寫一份「團隊進度匯報」。\n\n${taskData}`;
+                try {
+                    const resultRaw = await callGeminiAI([{ text: prompt }]);
+                    const result = cleanAIResponse(resultRaw);
+                    setAiReport(result);
+                    setModalConfig({ 
+                        isOpen: true, type: 'ai', title: 'AI 智能進度總結', content: null, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null,
+                        children: (<div className="mt-4"><div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{result}</div><CopyButton text={result} /></div>)
+                    });
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '生成失敗', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+                setAiLoading(false);
+            };
+
+            const handleSave = async (formData) => {
+                if (!formData.title?.trim() || !formData.source || !formData.status || !formData.assignedDate || !formData.dueDate || !formData.progress?.trim()) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '驗證錯誤', content: "請填寫所有必填欄位", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                    return;
+                }
+                try {
+                if (formData.id && formData.path) {
+                    const docRef = doc(db, formData.path);
+                    await updateDoc(docRef, { ...formData, updatedAt: serverTimestamp() });
+                } else {
+                    const collectionRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks');
+                    await addDoc(collectionRef, { ...formData, updatedAt: serverTimestamp(), createdAt: serverTimestamp(), createdByEmail: user.email });
+                }
+                setIsEditing(false); setCurrentTask(null);
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            const confirmDelete = (task) => {
+                setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: '確定要刪除此項目？', onConfirm: () => executeDelete(task), onCancel: () => setModalConfig({ isOpen: false }) });
+            };
+
+            const executeDelete = async (task) => {
+                setModalConfig({ isOpen: false });
+                try {
+                if (task.path) { await deleteDoc(doc(db, task.path)); } else { await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks', task.id)); }
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            const handleExport = () => { 
+                const headers = [{key:'status',label:'狀態'},{key:'title',label:'事項'},{key:'createdByEmail',label:'建立者'}]; 
+                exportToCSV(filteredTasks, 'WorkTasks', headers); 
+            };
+
+            return (
+                <div className="space-y-6 animate-in fade-in">
+                <Modal {...modalConfig} />
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View</span>}</div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-full sm:w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                        {isAdmin && <button onClick={handleGenerateReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
+                        <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm w-full sm:w-auto"><Download size={18} /> 匯出</button>
+                        <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
+                    </div>
+                </div>
+                {isEditing && <TaskForm initialData={currentTask} taskSources={taskSources} taskStatuses={taskStatuses} onSave={handleSave} onCancel={() => setIsEditing(false)} />}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-600">
+                        <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                        <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 min-w-[150px]">進度</th><th className="px-6 py-3 text-right">操作</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                        {filteredTasks.map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
+                        {filteredTasks.length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const MeetingMinutes = ({ db, user, isAdmin, isRootAdmin }) => {
+            const [meetings, setMeetings] = useState([]);
+            const [filteredMeetings, setFilteredMeetings] = useState([]);
+            const [isEditing, setIsEditing] = useState(false);
+            const [currentMeeting, setCurrentMeeting] = useState(null);
+            const [categories, setCategories] = useState(['內部會議', '客戶會議', '專案檢討']);
+            const [modalConfig, setModalConfig] = useState({ isOpen: false });
+            const [aiLoading, setAiLoading] = useState(false);
+            const [filterCategory, setFilterCategory] = useState('All');
+            const [searchQuery, setSearchQuery] = useState('');
+
+            useEffect(() => {
+                if (!db || !user) return;
+                const q = isAdmin
+                    ? query(collectionGroup(db, 'meetings'))
+                    : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings'));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
+                data.sort((a, b) => (new Date(b.date) - new Date(a.date)));
+                setMeetings(data);
+                }, (error) => console.error(error));
+                return () => unsubscribe();
+            }, [db, user, isAdmin]);
+
+            useEffect(() => {
+                if (!db) return;
+                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().meetingCategories) { setCategories(docSnap.data().meetingCategories); }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
+                let res = meetings;
+                if (filterCategory !== 'All') { res = res.filter(m => m.category === filterCategory); }
+                if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(m => m.topic.toLowerCase().includes(lowerQ) || m.host.toLowerCase().includes(lowerQ) || (m.createdByEmail && m.createdByEmail.toLowerCase().includes(lowerQ))); }
+                setFilteredMeetings(res);
+            }, [meetings, filterCategory, searchQuery]);
+
+            const handleGenerateMeetingReport = async () => {
+                if (!filteredMeetings.length) { setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
+                setAiLoading(true);
+                setModalConfig({ isOpen: true, type: 'ai', title: 'AI 正在分析...', content: '正在閱讀記錄...', onConfirm: null, confirmText: "", onCancel: null });
+                try {
+                    const parts = [];
+                    const meetingsToAnalyze = filteredMeetings.slice(0, 5); 
+                    let promptText = `請根據以下會議記錄（含圖片），撰寫總結匯報。\n\n`;
+                    meetingsToAnalyze.forEach((m, index) => {
+                        const { text, images } = extractContentForAI(m.content);
+                        promptText += `--- 會議 ${index + 1}: ${m.date} ${m.topic} ---\n${text}\n\n`;
+                        images.forEach(img => { parts.push(img); });
+                    });
+                    parts.unshift({ text: promptText });
+                    const resultRaw = await callGeminiAI(parts);
+                    const result = cleanAIResponse(resultRaw);
+                    setModalConfig({ 
+                        isOpen: true, type: 'ai', title: 'AI 會議智能總結', content: null, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null,
+                        children: (<div className="mt-4"><div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{result}</div><CopyButton text={result} /></div>)
+                    });
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '生成失敗', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+                setAiLoading(false);
+            };
+
+            const handleSave = async (formData) => {
+                if (!formData.content || formData.content.trim() === '') { setModalConfig({ isOpen: true, type: 'danger', title: '驗證錯誤', content: "內容必填", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
+                try {
+                if (formData.id && formData.path) { await updateDoc(doc(db, formData.path), { ...formData, updatedAt: serverTimestamp() }); } 
+                else { const collectionRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings'); await addDoc(collectionRef, { ...formData, updatedAt: serverTimestamp(), createdAt: serverTimestamp(), createdByEmail: user.email }); }
+                setIsEditing(false); setCurrentMeeting(null);
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmDelete = (meeting) => { setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: '確定要刪除？', onConfirm: () => executeDelete(meeting), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const executeDelete = async (meeting) => {
+                setModalConfig({ isOpen: false });
+                try { if (meeting.path) { await deleteDoc(doc(db, meeting.path)); } else { await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings', meeting.id)); } } 
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const handleExport = () => { /* ... */ };
+
+            return (
+                <div className="space-y-6 animate-in fade-in">
+                <Modal {...modalConfig} />
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View</span>}</div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                        {isAdmin && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
+                        <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
+                    </div>
+                </div>
+                {isEditing ? (
+                    <MeetingForm initialData={currentMeeting} categories={categories} onSave={handleSave} onCancel={() => setIsEditing(false)} />
+                ) : (
+                    <div className="space-y-4">
+                    {filteredMeetings.map(meeting => (
+                        <MeetingRow key={meeting.id} meeting={meeting} onEdit={() => { setCurrentMeeting(meeting); setIsEditing(true); }} onDelete={() => confirmDelete(meeting)} />
+                    ))}
+                    {filteredMeetings.length === 0 && <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">沒有資料</div>}
+                    </div>
+                )}
+                </div>
+            );
+        };
+
+        const SettingsPage = ({ db, user, isAdmin, cloudAdmins, rootAdmins, onSaveGeminiKey }) => {
+            const [newCategory, setNewCategory] = useState('');
+            const [categories, setCategories] = useState([]);
+            const [newTaskSource, setNewTaskSource] = useState('');
+            const [taskSources, setTaskSources] = useState([]);
+            const [newTaskStatus, setNewTaskStatus] = useState('');
+            const [taskStatuses, setTaskStatuses] = useState([]);
+            const [newAdminEmail, setNewAdminEmail] = useState('');
+            const [modalConfig, setModalConfig] = useState({ isOpen: false });
+            const [allUsers, setAllUsers] = useState([]);
+
+            useEffect(() => {
+                if (!db) return;
+                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setCategories(data.meetingCategories || ['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
+                        setTaskSources(data.taskSources || ['Email', 'Meeting', 'Chat', 'Other']);
+                        setTaskStatuses(data.taskStatuses || ['Pending', 'On-going', 'Done']);
+                    } else {
+                        setCategories(['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
+                        setTaskSources(['Email', 'Meeting', 'Chat', 'Other']);
+                        setTaskStatuses(['Pending', 'On-going', 'Done']);
+                    }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
+                if (!db || !isAdmin) return;
+                const q = query(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'), orderBy('lastSeen', 'desc'));
+                const unsubscribe = onSnapshot(q, (snapshot) => { setAllUsers(snapshot.docs.map(doc => doc.data())); });
+                return () => unsubscribe();
+            }, [db, isAdmin]);
+
+            const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
+                if (!newItem.trim()) return;
+                if (list.includes(newItem.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "此選項已存在", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options'), { [field]: arrayUnion(newItem.trim()) }, { merge: true }); setNewItemState(''); } 
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmDeleteItem = (field, itemToDelete, list) => { setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: `確定要刪除「${itemToDelete}」嗎？`, onConfirm: () => executeDeleteItem(field, itemToDelete, list), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const executeDeleteItem = async (field, itemToDelete, list) => {
+                setModalConfig({ isOpen: false });
+                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                try {
+                    const snapshot = await getDoc(settingsRef);
+                    let updatedList = [];
+                    if (snapshot.exists()) { updatedList = (snapshot.data()[field] || []).filter(c => c !== itemToDelete); } 
+                    else { updatedList = list.filter(c => c !== itemToDelete); }
+                    await setDoc(settingsRef, { [field]: updatedList }, { merge: true });
+                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const handleAddAdmin = async () => {
+                if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "Email 格式錯誤", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (cloudAdmins.includes(newAdminEmail.trim()) || rootAdmins.includes(newAdminEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins'), { list: arrayUnion(newAdminEmail.trim()) }, { merge: true }); setNewAdminEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newAdminEmail} 新增為管理員`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmRemoveAdmin = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${emailToRemove} 的管理員權限？`, onConfirm: () => executeRemoveAdmin(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const executeRemoveAdmin = async (emailToRemove) => {
+                setModalConfig({ isOpen: false });
+                const adminsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins');
+                try { const snapshot = await getDoc(adminsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(adminsRef, { list: updatedList }, { merge: true }); } } 
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            return (
+                <div className="max-w-3xl mx-auto space-y-8 pb-12">
+                    <Modal {...modalConfig} />
+                    
+                    {/* User Registry List */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left text-slate-600">
+                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th></tr></thead>
+                                <tbody className="divide-y divide-slate-100">{allUsers.length === 0 ? (<tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>) : (allUsers.map((u) => (<tr key={u.uid} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{u.email}</td><td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td><td className="px-4 py-3 text-xs">{u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000).toLocaleString() : 'N/A'}</td></tr>)))}</tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Admin Management Panel */}
+                    {isAdmin && (
+                        <div className="bg-yellow-50 p-8 rounded-xl shadow-sm border border-yellow-200">
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-yellow-100 rounded-full"><UserCog className="text-yellow-700" size={24} /></div><div><h2 className="text-xl font-bold text-yellow-900">使用者權限管理</h2><p className="text-sm text-yellow-700">管理誰可以修改全域設定</p></div></div>
+                            <div className="flex gap-2 mb-6"><input value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()} /><button onClick={handleAddAdmin} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm whitespace-nowrap">新增管理員</button></div>
+                            <div className="bg-white rounded-lg border border-yellow-200 overflow-hidden"><ul className="divide-y divide-yellow-100">{rootAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-bold text-slate-700"><ShieldCheck size={14} className="text-purple-600"/> {email}</span><span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">系統預設</span></li>))}{cloudAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-yellow-600"/> {email}</span><button onClick={() => confirmRemoveAdmin(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                        </div>
+                    )}
+
+                    {/* Global Options: Meeting Categories */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-emerald-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
+                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="輸入新分類名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} /><button onClick={() => handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{categories.map((cat, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{cat}</span>{isAdmin && <button onClick={() => confirmDeleteItem('meetingCategories', cat, categories)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                    </div>
+
+                    {/* Global Options: Task Sources */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-blue-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-blue-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦來源</h2></div></div>
+                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newTaskSource} onChange={(e) => setNewTaskSource(e.target.value)} placeholder="輸入新來源名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} /><button onClick={() => handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{isAdmin && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                    </div>
+
+                    {/* Global Options: Task Statuses */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-indigo-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
+                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{isAdmin && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 4. Main App Component (Must be last) ---
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('tasks'); 
+            const [appInstance, setAppInstance] = useState(null);
+            const [db, setDb] = useState(null);
+            const [auth, setAuth] = useState(null);
+            const [user, setUser] = useState(null);
+            const [error, setError] = useState(null);
+            const [statusMsg, setStatusMsg] = useState('初始化中...');
+            const [isAuthChecking, setIsAuthChecking] = useState(true);
+            const [cloudAdmins, setCloudAdmins] = useState([]);
+            
+            useEffect(() => {
+                const initFirebase = async () => {
+                    try {
+                        const APP_NAME = 'work-tracker-app';
+                        let app;
+                        const existingApp = getApps().find(app => app.name === APP_NAME);
+                        if (existingApp) {
+                            app = existingApp;
+                        } else {
+                            app = initializeApp(DEFAULT_CONFIG, APP_NAME);
+                        }
+                        const authInstance = getAuth(app);
+                        const dbInstance = getFirestore(app);
+                        setAppInstance(app);
+                        setAuth(authInstance);
+                        setDb(dbInstance);
+                        onAuthStateChanged(authInstance, (u) => {
+                            setUser(u);
+                            setIsAuthChecking(false);
+                            setStatusMsg(u ? '已連線' : '請先登入');
+                        });
+                    } catch (err) {
+                        console.error("Firebase Init Error:", err);
+                        setError(`連線錯誤: ${err.message}`);
+                        setIsAuthChecking(false);
+                    }
+                };
+                initFirebase();
+            }, []);
+
+            useEffect(() => {
+                if (!db) return;
+                const adminsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins');
+                const unsubscribe = onSnapshot(adminsRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().list) {
+                        setCloudAdmins(docSnap.data().list);
+                    } else {
+                        setCloudAdmins([]);
+                    }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
+                if (db && user && user.email) {
+                    const registerUser = async () => {
+                        try {
+                            const userRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', user.uid);
+                            await setDoc(userRef, {
+                                uid: user.uid,
+                                email: user.email,
+                                lastSeen: serverTimestamp()
+                            }, { merge: true });
+                        } catch (e) {
+                            console.error("User Registry Error:", e);
+                        }
+                    };
+                    registerUser();
+                }
+            }, [db, user]);
+
+            const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
+
+            const handleSaveGeminiKey = (key) => {
+                alert("API Key 已內建，無需設定！");
+            };
+
+            if (isAuthChecking) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-slate-500">
+                        <Loader2 size={48} className="animate-spin mb-4 text-blue-600" />
+                        <p>正在連線至系統...</p>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return <AuthPage auth={auth} error={error} />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col md:flex-row">
+                    <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
+                        <div className="p-6 border-b border-slate-700">
+                            <h1 className="text-xl font-bold flex items-center gap-2">
+                                <Database className="text-blue-400" />
+                                工作紀錄中心
+                            </h1>
+                            <p className="text-xs text-slate-400 mt-2">Firebase 雲端同步版</p>
+                        </div>
+                        <nav className="p-4 space-y-2 flex-1">
+                            <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
+                            <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
+                            <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
+                            
+                            {isUserAdmin && (
+                                <div className="pt-4 border-t border-slate-700 mt-4">
+                                    <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={20} />} label="系統設定" />
+                                </div>
+                            )}
+                        </nav>
+                        <div className="p-4 bg-slate-800 border-t border-slate-700">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+                                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div className="overflow-hidden">
+                                    <div className="text-sm font-bold truncate w-32">{user.email}</div>
+                                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                                        {isUserAdmin ? <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span> : 'User'}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3">
+                                <LogOut size={14} /> 登出
+                            </button>
+
+                            <div className="pt-3 border-t border-slate-700 text-[10px] text-slate-500 text-center">
+                                <p>System Creator: {SYSTEM_CREATOR}</p>
+                                <p>Version: {APP_VERSION}</p>
+                            </div>
+                        </div>
+                    </aside>
+                    
+                    <main className="flex-1 overflow-y-auto h-screen p-4 md:p-8 relative bg-slate-50/50">
+                        {activeTab === 'dashboard' && <Dashboard db={db} user={user} isAdmin={isUserAdmin} />}
+                        {activeTab === 'tasks' && <TaskManager db={db} user={user} isAdmin={isUserAdmin} />}
+                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} />}
+                        {activeTab === 'settings' && (
+                            isUserAdmin ? (
+                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} cloudAdmins={cloudAdmins} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                    <ShieldAlert size={48} className="mb-4" />
+                                    <h2 className="text-xl font-bold text-slate-600">權限不足</h2>
+                                    <p>您沒有權限存取系統設定頁面。</p>
+                                </div>
+                            )
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
