@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.2.7</title>
+    <title>工作紀錄中心 V2.2.8</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.2.7"; // Updated: API key rotation
+        const APP_VERSION = "V2.2.8"; // Updated: user registry list robustness
         const GEMINI_API_KEY = "AIzaSyCleWDhL6UaATiAGSWPxs5AZhD46VBhxLQ";
 
         // --- 1. Firebase Configuration ---
@@ -767,6 +767,8 @@
             const [newAdminEmail, setNewAdminEmail] = useState('');
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [allUsers, setAllUsers] = useState([]);
+            const [isUserListLoading, setIsUserListLoading] = useState(false);
+            const [userListError, setUserListError] = useState('');
 
             useEffect(() => {
                 if (!db) return;
@@ -788,8 +790,29 @@
 
             useEffect(() => {
                 if (!db || !isAdmin) return;
+                setIsUserListLoading(true);
+                setUserListError('');
                 const q = query(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'), orderBy('lastSeen', 'desc'));
-                const unsubscribe = onSnapshot(q, (snapshot) => { setAllUsers(snapshot.docs.map(doc => doc.data())); });
+                const unsubscribe = onSnapshot(
+                    q,
+                    (snapshot) => {
+                        const users = snapshot.docs.map((docSnap) => {
+                            const data = docSnap.data();
+                            return {
+                                ...data,
+                                uid: data.uid || docSnap.id,
+                                email: data.email || '(未填寫)'
+                            };
+                        });
+                        setAllUsers(users);
+                        setIsUserListLoading(false);
+                    },
+                    (error) => {
+                        console.error('User list snapshot error:', error);
+                        setUserListError(`讀取失敗：${error.message}`);
+                        setIsUserListLoading(false);
+                    }
+                );
                 return () => unsubscribe();
             }, [db, isAdmin]);
 
@@ -835,7 +858,28 @@
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
                                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th></tr></thead>
-                                <tbody className="divide-y divide-slate-100">{allUsers.length === 0 ? (<tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>) : (allUsers.map((u) => (<tr key={u.uid} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{u.email}</td><td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td><td className="px-4 py-3 text-xs">{u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000).toLocaleString() : 'N/A'}</td></tr>)))}</tbody>
+                                <tbody className="divide-y divide-slate-100">
+                                    {userListError ? (
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
+                                    ) : isUserListLoading ? (
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
+                                    ) : allUsers.length === 0 ? (
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
+                                    ) : (
+                                        allUsers.map((u) => {
+                                            const lastSeenDate = u.lastSeen?.toDate
+                                                ? u.lastSeen.toDate()
+                                                : (u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000) : null);
+                                            return (
+                                                <tr key={u.uid} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-medium text-slate-800">{u.email}</td>
+                                                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
+                                                    <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
                             </table>
                         </div>
                     </div>
