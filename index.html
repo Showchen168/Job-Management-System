@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.2.5</title>
+    <title>工作紀錄中心 V2.2.6</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.2.5"; // Updated: Fix AI Cleanup & Copy Button
+        const APP_VERSION = "V2.2.6"; // Updated: Improve AI summary cleanup
         const GEMINI_API_KEY = "AIzaSyDf1uvdBH1Sgi5Xj48jsUdGOnkO4hYsxHQ";
 
         // --- 1. Firebase Configuration ---
@@ -139,9 +139,19 @@
         const cleanAIResponse = (text) => {
             if (!text) return "";
             return text
-                .replace(/(\*\*|__)(.*?)\1/g, '$2') // 移除粗體/斜體標記
-                .replace(/^#+\s+/gm, '')           // 移除標題標記 (#, ##, ###)
-                .replace(/`/g, '')                 // 移除代碼塊符號
+                .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, '').trim())
+                .replace(/!\[.*?\]\(.*?\)/g, '')               // 移除圖片標記
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')       // 移除連結格式
+                .replace(/^>\s?/gm, '')                        // 移除引用
+                .replace(/^#+\s+/gm, '')                       // 移除標題標記 (#, ##, ###)
+                .replace(/^\s*[-*+]\s+/gm, '')                 // 移除無序清單
+                .replace(/^\s*\d+\.\s+/gm, '')                 // 移除有序清單
+                .replace(/^[-*_]{3,}$/gm, '')                  // 移除分隔線
+                .replace(/(\*\*|__)(.*?)\1/g, '$2')             // 移除粗體標記
+                .replace(/(\*|_)(.*?)\1/g, '$2')               // 移除斜體標記
+                .replace(/~~(.*?)~~/g, '$1')                   // 移除刪除線
+                .replace(/`/g, '')                             // 移除行內代碼標記
+                .replace(/\n{3,}/g, '\n\n')
                 .trim();
         };
 
