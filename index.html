@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.2.5</title>
+    <title>工作紀錄中心 V2.2.10</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -67,6 +67,10 @@
 
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
+            if (!message || message === 'Script error.') {
+                console.warn('Ignored global error:', message);
+                return;
+            }
             const errorDiv = document.getElementById('global-error');
             errorDiv.style.display = 'block';
             errorDiv.innerHTML = `<strong>系統發生錯誤:</strong><br/>${message}`;
@@ -92,8 +96,14 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.2.5"; // Updated: Fix AI Cleanup & Copy Button
-        const GEMINI_API_KEY = "AIzaSyDf1uvdBH1Sgi5Xj48jsUdGOnkO4hYsxHQ";
+        const APP_VERSION = "V2.2.10"; // Updated: auth timeout safeguard
+        const DEFAULT_AI_MODEL = "gemini-3-flash-preview";
+        const AI_MODELS = [
+            { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
+            { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+            { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" }
+        ];
+        const GEMINI_API_KEY = "AIzaSyCleWDhL6UaATiAGSWPxs5AZhD46VBhxLQ";
 
         // --- 1. Firebase Configuration ---
         const DEFAULT_CONFIG = {
@@ -116,8 +126,16 @@
         };
 
         // --- Helper Functions ---
-        const callGeminiAI = async (contentParts) => {
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+        const getSettingsDocRef = (db) => doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+
+        const getModelLabel = (modelValue) => {
+            const match = AI_MODELS.find((model) => model.value === modelValue);
+            return match ? match.label : modelValue;
+        };
+
+        const callGeminiAI = async (contentParts, modelName = DEFAULT_AI_MODEL) => {
+            const activeModel = modelName || DEFAULT_AI_MODEL;
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${GEMINI_API_KEY}`;
             try {
                 const response = await fetch(API_URL, {
                 method: 'POST',
@@ -139,9 +157,16 @@
         const cleanAIResponse = (text) => {
             if (!text) return "";
             return text
-                .replace(/(\*\*|__)(.*?)\1/g, '$2') // 移除粗體/斜體標記
-                .replace(/^#+\s+/gm, '')           // 移除標題標記 (#, ##, ###)
-                .replace(/`/g, '')                 // 移除代碼塊符號
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+                .replace(/(\*\*|__)(.*?)\1/g, '$2')
+                .replace(/(\*|_)(.*?)\1/g, '$2')
+                .replace(/^#{1,6}\s+/gm, '')
+                .replace(/^\s*>+\s?/gm, '')
+                .replace(/^\s*[-*+]\s+/gm, '')
+                .replace(/^\s*\d+[.)]\s+/gm, '')
+                .replace(/^\s*([-*_]){3,}\s*$/gm, '')
+                .replace(/`/g, '')
+                .replace(/\n{3,}/g, '\n\n')
                 .trim();
         };
 
@@ -528,6 +553,7 @@
             const isRootAdmin = ROOT_ADMINS.includes(user?.email);
             const [aiLoading, setAiLoading] = useState(false);
             const [aiReport, setAiReport] = useState('');
+            const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
             const [filterStatus, setFilterStatus] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
             
@@ -546,9 +572,16 @@
 
             useEffect(() => {
                 if (!db) return;
-                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const settingsRef = getSettingsDocRef(db);
                 const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-                    if (docSnap.exists()) { const data = docSnap.data(); if (data.taskSources) setTaskSources(data.taskSources); if (data.taskStatuses) setTaskStatuses(data.taskStatuses); }
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.taskSources) setTaskSources(data.taskSources);
+                        if (data.taskStatuses) setTaskStatuses(data.taskStatuses);
+                        if (data.aiModel) setAiModel(data.aiModel);
+                    } else {
+                        setAiModel(DEFAULT_AI_MODEL);
+                    }
                 });
                 return () => unsubscribe();
             }, [db]);
@@ -567,7 +600,7 @@
                 const taskData = filteredTasks.map(t => `- [${t.status}] ${t.title} (Owner: ${t.createdByEmail || 'Unknown'}, 截止: ${t.dueDate})`).join('\n');
                 const prompt = `請根據以下待辦事項清單(含不同負責人)，撰寫一份「團隊進度匯報」。\n\n${taskData}`;
                 try {
-                    const resultRaw = await callGeminiAI([{ text: prompt }]);
+                    const resultRaw = await callGeminiAI([{ text: prompt }], aiModel);
                     const result = cleanAIResponse(resultRaw);
                     setAiReport(result);
                     setModalConfig({ 
@@ -650,6 +683,7 @@
             const [categories, setCategories] = useState(['內部會議', '客戶會議', '專案檢討']);
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [aiLoading, setAiLoading] = useState(false);
+            const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
             const [filterCategory, setFilterCategory] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
 
@@ -668,9 +702,15 @@
 
             useEffect(() => {
                 if (!db) return;
-                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const settingsRef = getSettingsDocRef(db);
                 const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().meetingCategories) { setCategories(docSnap.data().meetingCategories); }
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.meetingCategories) setCategories(data.meetingCategories);
+                        if (data.aiModel) setAiModel(data.aiModel);
+                    } else {
+                        setAiModel(DEFAULT_AI_MODEL);
+                    }
                 });
                 return () => unsubscribe();
             }, [db]);
@@ -696,7 +736,7 @@
                         images.forEach(img => { parts.push(img); });
                     });
                     parts.unshift({ text: promptText });
-                    const resultRaw = await callGeminiAI(parts);
+                    const resultRaw = await callGeminiAI(parts, aiModel);
                     const result = cleanAIResponse(resultRaw);
                     setModalConfig({ 
                         isOpen: true, type: 'ai', title: 'AI 會議智能總結', content: null, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null,
@@ -755,26 +795,56 @@
             const [newTaskStatus, setNewTaskStatus] = useState('');
             const [taskStatuses, setTaskStatuses] = useState([]);
             const [newAdminEmail, setNewAdminEmail] = useState('');
+            const [aiModel, setAiModel] = useState(DEFAULT_AI_MODEL);
+            const [availableModels, setAvailableModels] = useState([]);
+            const [modelStatus, setModelStatus] = useState({ state: 'idle', message: '' });
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [allUsers, setAllUsers] = useState([]);
 
             useEffect(() => {
                 if (!db) return;
-                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const settingsRef = getSettingsDocRef(db);
                 const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         setCategories(data.meetingCategories || ['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
                         setTaskSources(data.taskSources || ['Email', 'Meeting', 'Chat', 'Other']);
                         setTaskStatuses(data.taskStatuses || ['Pending', 'On-going', 'Done']);
+                        setAiModel(data.aiModel || DEFAULT_AI_MODEL);
                     } else {
                         setCategories(['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
                         setTaskSources(['Email', 'Meeting', 'Chat', 'Other']);
                         setTaskStatuses(['Pending', 'On-going', 'Done']);
+                        setAiModel(DEFAULT_AI_MODEL);
                     }
                 });
                 return () => unsubscribe();
             }, [db]);
+
+            useEffect(() => {
+                const fetchAvailableModels = async () => {
+                    setModelStatus({ state: 'loading', message: '正在檢查可用模型...' });
+                    try {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
+                        if (!response.ok) {
+                            throw new Error('模型清單取得失敗');
+                        }
+                        const data = await response.json();
+                        const models = (data.models || [])
+                            .filter((model) => (model.supportedGenerationMethods || []).includes('generateContent'))
+                            .map((model) => model.name.replace('models/', ''));
+                        setAvailableModels(models);
+                        setModelStatus({
+                            state: 'ready',
+                            message: models.length ? `已取得 ${models.length} 個可用模型` : '未取得可用模型'
+                        });
+                    } catch (error) {
+                        setAvailableModels([]);
+                        setModelStatus({ state: 'error', message: error.message || '模型檢查失敗' });
+                    }
+                };
+                fetchAvailableModels();
+            }, []);
 
             useEffect(() => {
                 if (!db || !isAdmin) return;
@@ -786,13 +856,13 @@
             const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
                 if (!newItem.trim()) return;
                 if (list.includes(newItem.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "此選項已存在", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options'), { [field]: arrayUnion(newItem.trim()) }, { merge: true }); setNewItemState(''); } 
+                try { await setDoc(getSettingsDocRef(db), { [field]: arrayUnion(newItem.trim()) }, { merge: true }); setNewItemState(''); } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
             const confirmDeleteItem = (field, itemToDelete, list) => { setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: `確定要刪除「${itemToDelete}」嗎？`, onConfirm: () => executeDeleteItem(field, itemToDelete, list), onCancel: () => setModalConfig({ isOpen: false }) }); };
             const executeDeleteItem = async (field, itemToDelete, list) => {
                 setModalConfig({ isOpen: false });
-                const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+                const settingsRef = getSettingsDocRef(db);
                 try {
                     const snapshot = await getDoc(settingsRef);
                     let updatedList = [];
@@ -814,10 +884,52 @@
                 try { const snapshot = await getDoc(adminsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(adminsRef, { list: updatedList }, { merge: true }); } } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
+            const handleAiModelChange = async (event) => {
+                const selectedModel = event.target.value;
+                setAiModel(selectedModel);
+                try {
+                    await setDoc(getSettingsDocRef(db), { aiModel: selectedModel }, { merge: true });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新模型失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
+            };
 
             return (
                 <div className="max-w-3xl mx-auto space-y-8 pb-12">
                     <Modal {...modalConfig} />
+                    
+                    {/* AI Model Settings */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-3 bg-purple-100 rounded-full"><Bot className="text-purple-700" size={24} /></div>
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800">AI 模型設定</h2>
+                                <p className="text-sm text-slate-500">目前使用模型：{getModelLabel(aiModel)}</p>
+                            </div>
+                        </div>
+                        <div className="mb-4 text-xs text-slate-500 flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${modelStatus.state === 'error' ? 'bg-red-100 text-red-700' : modelStatus.state === 'ready' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {modelStatus.state === 'loading' ? '檢查中' : modelStatus.state === 'error' ? '檢查失敗' : '已更新'}
+                            </span>
+                            <span>{modelStatus.message || '尚未檢查模型清單'}</span>
+                        </div>
+                        {isAdmin && (
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-slate-500 uppercase">選擇模型</label>
+                                <select value={aiModel} onChange={handleAiModelChange} className="w-full p-2 border border-slate-300 rounded-lg bg-white">
+                                    {AI_MODELS.map((model) => {
+                                        const isAvailable = !availableModels.length || availableModels.includes(model.value);
+                                        return (
+                                            <option key={model.value} value={model.value} disabled={!isAvailable}>
+                                                {model.label}{isAvailable ? '' : '（不可用）'}
+                                            </option>
+                                        );
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-400">變更後將套用於 AI 總結功能，若模型不可用將會被停用。</p>
+                            </div>
+                        )}
+                    </div>
                     
                     {/* User Registry List */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
@@ -877,7 +989,9 @@
             const [cloudAdmins, setCloudAdmins] = useState([]);
             
             useEffect(() => {
-                const initFirebase = async () => {
+                let isMounted = true;
+                let unsubscribeAuth = null;
+                const initFirebase = () => {
                     try {
                         const APP_NAME = 'work-tracker-app';
                         let app;
@@ -889,21 +1003,35 @@
                         }
                         const authInstance = getAuth(app);
                         const dbInstance = getFirestore(app);
+                        if (!isMounted) return;
                         setAppInstance(app);
                         setAuth(authInstance);
                         setDb(dbInstance);
-                        onAuthStateChanged(authInstance, (u) => {
+                        unsubscribeAuth = onAuthStateChanged(authInstance, (u) => {
+                            if (!isMounted) return;
                             setUser(u);
                             setIsAuthChecking(false);
                             setStatusMsg(u ? '已連線' : '請先登入');
                         });
                     } catch (err) {
                         console.error("Firebase Init Error:", err);
+                        if (!isMounted) return;
                         setError(`連線錯誤: ${err.message}`);
                         setIsAuthChecking(false);
                     }
                 };
                 initFirebase();
+                const timeoutId = setTimeout(() => {
+                    if (!isMounted) return;
+                    setError('連線逾時，請檢查網路或重新整理頁面');
+                    setIsAuthChecking(false);
+                    setStatusMsg('連線逾時');
+                }, 15000);
+                return () => {
+                    isMounted = false;
+                    clearTimeout(timeoutId);
+                    if (unsubscribeAuth) unsubscribeAuth();
+                };
             }, []);
 
             useEffect(() => {
