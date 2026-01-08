@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.2.10</title>
+    <title>工作紀錄中心 V2.3.1</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.2.10"; // Updated: user registry list robustness
+        const APP_VERSION = "V2.3.1"; // Updated: meeting AI prompt template
         const GEMINI_API_KEY = "AIzaSyBrQVMs-71oxtvDKKMdRdzjGTrmZ2vxYJg";
 
         // --- 1. Firebase Configuration ---
@@ -146,6 +146,9 @@
                 .replace(/^#+\s+/gm, '')                       // 移除標題標記 (#, ##, ###)
                 .replace(/^\s*[-*+]\s+/gm, '')                 // 移除無序清單
                 .replace(/^\s*\d+\.\s+/gm, '')                 // 移除有序清單
+                .replace(/^\s*[•・‧]\s+/gm, '')                 // 移除特殊符號清單
+                .replace(/^\s*\|?[\s:-]+\|?\s*$/gm, '')         // 移除表格分隔線
+                .replace(/\|/g, ' ')                           // 移除表格管線符號
                 .replace(/^[-*_]{3,}$/gm, '')                  // 移除分隔線
                 .replace(/(\*\*|__)(.*?)\1/g, '$2')             // 移除粗體標記
                 .replace(/(\*|_)(.*?)\1/g, '$2')               // 移除斜體標記
@@ -576,8 +579,24 @@
                 if (!filteredTasks.length) { setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
                 setAiLoading(true);
                 setModalConfig({ isOpen: true, type: 'ai', title: 'AI 正在思考中...', content: '正在撰寫報告...', onConfirm: null, confirmText: "", onCancel: null });
-                const taskData = filteredTasks.map(t => `- [${t.status}] ${t.title} (負責人: ${t.assignee || t.createdByEmail || 'Unknown'}, 截止: ${t.dueDate})`).join('\n');
-                const prompt = `請根據以下待辦事項清單(含不同負責人)，撰寫一份「團隊進度匯報」。\n\n${taskData}`;
+                const taskData = filteredTasks.map((t, index) => {
+                    const assignee = t.assignee || t.createdByEmail || 'Unknown';
+                    const dueDate = t.dueDate || '未提供';
+                    const status = t.status || '未提供';
+                    const progress = t.progress || '未提供';
+                    return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；截止日=${dueDate}；狀態=${status}；進度=${progress}`;
+                }).join('\n');
+                const prompt = [
+                    "你是專案管理助理，請根據以下待辦事項清單產出「團隊進度匯報」。",
+                    "輸出規範：",
+                    "1. 使用純文字，不使用Markdown、表格或條列符號（包含 | - • 等）。",
+                    "2. 使用三個段落標題：總覽、待辦事項清單、提醒與風險。",
+                    "3. 待辦事項清單請逐條描述，格式為「事項：... 負責人：... 截止日：... 狀態：... 進度：...」。",
+                    "4. 如有逾期或進度落後，請在提醒與風險中用中文完整句子說明。",
+                    "",
+                    "待辦事項清單：",
+                    taskData
+                ].join('\n');
                 try {
                     const resultRaw = await callGeminiAI([{ text: prompt }]);
                     const result = cleanAIResponse(resultRaw);
@@ -701,7 +720,56 @@
                 try {
                     const parts = [];
                     const meetingsToAnalyze = filteredMeetings.slice(0, 5); 
-                    let promptText = `請根據以下會議記錄（含圖片），撰寫總結匯報。\n\n`;
+                    let promptText = [
+                        "### 角色",
+                        "你是一位擁有 10 年經驗的「資深高階行政秘書」，擅長資訊萃取、邏輯歸納與商務溝通。你具備將零散、口語化的會議對話轉化為條理分明、具備執行力的專業會議紀錄的能力。",
+                        "",
+                        "### 任務",
+                        "請閱讀並分析提供的 [會議記錄/逐字稿/筆記]，產出一份結構化的會議紀要。你的目標是讓未參與會議的主管或同仁能在 3 分鐘內掌握會議重點與後續行動。",
+                        "",
+                        "### 情境",
+                        "- 原始資料可能包含口語贅字、離題討論或不完整的句子，你需要過濾雜訊，僅保留核心價值資訊。",
+                        "- 若會議中涉及多個議題，請依照議題進行分類歸納。",
+                        "",
+                        "### 限制條件",
+                        "- **輸出格式**：Markdown 格式（請參考下方範本）。",
+                        "- **語氣風格**：專業、客觀、簡練（Business Professional）。",
+                        "- **語言**：繁體中文（台灣慣用語）。",
+                        "- **內容處理**：",
+                        "  1. 遇到模糊不清的日期或人名，請標註「[需確認]」。",
+                        "  2. 待辦事項（Action Items）必須包含「負責人」與「預計完成時間」（若無提及則標註待定）。",
+                        "",
+                        "### 輸出範本架構",
+                        "# [會議名稱] 會議紀要",
+                        "",
+                        "**會議時間**：[YYYY/MM/DD]",
+                        "**與會人員**：[列出名單]",
+                        "",
+                        "## 1. 執行摘要 (Executive Summary)",
+                        "> 用 3-5 句話概括本次會議的核心目的與最重要結論。",
+                        "",
+                        "## 2. 重點議題討論",
+                        "* **議題一：[議題名稱]**",
+                        "    * 討論重點：...",
+                        "    * 關鍵數據/事實：...",
+                        "* **議題二：[議題名稱]**",
+                        "    * ...",
+                        "",
+                        "## 3. 關鍵決策 (Key Decisions)",
+                        "* [決策 1]",
+                        "* [決策 2]",
+                        "",
+                        "## 4. 待辦事項 (Action Items)",
+                        "| 事項描述 | 負責人 | 截止日期 |",
+                        "| :--- | :--- | :--- |",
+                        "| [具體行動] | [姓名] | [日期] |",
+                        "",
+                        "---",
+                        "",
+                        "### 原始會議內容",
+                        "請根據以下內容進行整理：",
+                        ""
+                    ].join('\n');
                     meetingsToAnalyze.forEach((m, index) => {
                         const { text, images } = extractContentForAI(m.content);
                         promptText += `--- 會議 ${index + 1}: ${m.date} ${m.topic} ---\n${text}\n\n`;
