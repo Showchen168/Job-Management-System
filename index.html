@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3.5</title>
+    <title>工作紀錄中心 V2.3.6</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -83,7 +83,14 @@
             getFirestore, collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove 
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { 
-            getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged 
+            getAuth,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged,
+            sendPasswordResetEmail,
+            confirmPasswordReset,
+            verifyPasswordResetCode
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
         import { 
@@ -92,7 +99,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3.5"; // Updated: editor role access
+        const APP_VERSION = "V2.3.6"; // Updated: password reset flow
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -432,6 +439,23 @@
             const [password, setPassword] = useState('');
             const [authError, setAuthError] = useState('');
             const [loading, setLoading] = useState(false);
+            const [showForgot, setShowForgot] = useState(false);
+            const [resetEmail, setResetEmail] = useState('');
+            const [resetMessage, setResetMessage] = useState('');
+            const [resetError, setResetError] = useState('');
+            const [resetCode, setResetCode] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [resetLoading, setResetLoading] = useState(false);
+
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get('oobCode');
+                if (code) {
+                    setResetCode(code);
+                    setShowForgot(true);
+                }
+            }, []);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
@@ -455,6 +479,60 @@
                 setLoading(false);
             };
 
+            const handleSendResetEmail = async () => {
+                if (!resetEmail) {
+                    setResetError('請輸入 Email 信箱');
+                    return;
+                }
+                setResetError('');
+                setResetMessage('');
+                setResetLoading(true);
+                try {
+                    await sendPasswordResetEmail(auth, resetEmail);
+                    setResetMessage('已寄送重設密碼信件，請至信箱完成變更密碼。');
+                } catch (err) {
+                    console.error("Reset Email Error:", err);
+                    let msg = err.message;
+                    if (err.code === 'auth/user-not-found') msg = '此 Email 尚未註冊';
+                    if (err.code === 'auth/invalid-email') msg = 'Email 格式不正確';
+                    setResetError(msg);
+                }
+                setResetLoading(false);
+            };
+
+            const handleConfirmReset = async (e) => {
+                e.preventDefault();
+                if (!newPassword || !confirmPassword) {
+                    setResetError('請輸入新密碼並確認');
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    setResetError('兩次輸入的密碼不一致');
+                    return;
+                }
+                setResetError('');
+                setResetMessage('');
+                setResetLoading(true);
+                try {
+                    await verifyPasswordResetCode(auth, resetCode);
+                    await confirmPasswordReset(auth, resetCode, newPassword);
+                    setResetMessage('密碼已更新，請使用新密碼登入。');
+                    setResetCode('');
+                    setShowForgot(false);
+                    setIsLogin(true);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                } catch (err) {
+                    console.error("Confirm Reset Error:", err);
+                    let msg = err.message;
+                    if (err.code === 'auth/expired-action-code') msg = '重設連結已過期，請重新申請';
+                    if (err.code === 'auth/invalid-action-code') msg = '重設連結無效，請重新申請';
+                    if (err.code === 'auth/weak-password') msg = '密碼太短 (至少6位)';
+                    setResetError(msg);
+                }
+                setResetLoading(false);
+            };
+
             return (
                 <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -467,12 +545,46 @@
                     </div>
                     <div className="p-8">
                     {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label><input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                    {!showForgot && (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
+                            <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            {!isLogin && <p className="mt-2 text-xs text-slate-500">請用Aivres信箱註冊或登錄</p>}
+                        </div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">密碼</label><input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
                         {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
                         <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}</button>
-                    </form>
+                        {isLogin && <button type="button" onClick={() => { setShowForgot(true); setAuthError(''); setResetMessage(''); setResetError(''); }} className="w-full text-sm text-blue-600 hover:underline">忘記密碼？</button>}
+                        </form>
+                    )}
+                    {showForgot && (
+                        <form onSubmit={resetCode ? handleConfirmReset : (e) => { e.preventDefault(); handleSendResetEmail(); }} className="space-y-4">
+                        {!resetCode && (
+                            <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">重設信箱</label>
+                            <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
+                            <p className="mt-2 text-xs text-slate-500">系統將寄出重設密碼信件。</p>
+                            </div>
+                        )}
+                        {resetCode && (
+                            <>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">新密碼</label>
+                                <input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">確認新密碼</label>
+                                <input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                            </div>
+                            </>
+                        )}
+                        {resetMessage && <div className="text-emerald-600 text-sm flex items-center gap-1"><CheckCircle2 size={14} /> {resetMessage}</div>}
+                        {resetError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {resetError}</div>}
+                        <button type="submit" disabled={resetLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{resetLoading && <Loader2 size={18} className="animate-spin" />}{resetCode ? '更新密碼' : '寄送重設信件'}</button>
+                        <button type="button" onClick={() => { setShowForgot(false); setResetMessage(''); setResetError(''); setResetCode(''); }} className="w-full text-sm text-slate-500 hover:underline">返回登入</button>
+                        </form>
+                    )}
                     <div className="mt-6 text-center text-sm text-slate-500">{isLogin ? '還沒有帳號？' : '已經有帳號了？'}<button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="ml-2 text-blue-600 font-bold hover:underline">{isLogin ? '立即註冊' : '返回登入'}</button></div>
                     </div>
                 </div>
