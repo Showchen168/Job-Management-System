@@ -46,12 +46,6 @@ def test_prepare_notification_payloads_formats_subject_and_body():
     assert "狀態更新" in payloads[0]["body"]
 
 
-def test_prepare_notification_payloads_for_showchen():
-    tasks = [{"title": "更新進度", "status": "On-going", "assignee": "showchen"}]
-    payloads = prepare_notification_payloads(tasks, ["showchen@aivres.com"], notify_date=date(2024, 2, 1))
-    assert payloads[0]["to"] == "showchen@aivres.com"
-
-
 def test_should_send_notification_respects_daily_schedule():
     now = datetime(2024, 1, 1, 9, 0)
     assert should_send_notification(now, "09:00") is True

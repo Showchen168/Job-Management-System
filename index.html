@@ -11,7 +11,6 @@
 
     <!-- 2. 引入 React 和 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js" crossorigin="anonymous" onerror="window.__openccLoadError = true;"></script>
     
     <!-- 設定 Tailwind -->
     <script>
@@ -68,10 +67,6 @@
 
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
-            if (message === 'Script error.' && window.__openccLoadError) {
-                console.warn('OpenCC script failed to load.', { source, lineno, colno });
-                return;
-            }
             const errorDiv = document.getElementById('global-error');
             errorDiv.style.display = 'block';
             errorDiv.innerHTML = `<strong>系統發生錯誤:</strong><br/>${message}`;
@@ -136,123 +131,6 @@
             if (!email) return '使用者';
             const [prefix] = email.split('@');
             return prefix || email;
-        };
-
-        const applyLanguageConversion = (language, rootElement, cache) => {
-            if (window.__openccLoadError || !window.OpenCC || !rootElement) return;
-            const toSimplified = language === 'zh-CN';
-            const converter = toSimplified
-                ? OpenCC.Converter({ from: 't', to: 's' })
-                : OpenCC.Converter({ from: 's', to: 't' });
-            const walker = document.createTreeWalker(
-                rootElement,
-                NodeFilter.SHOW_TEXT,
-                {
-                    acceptNode: (node) => {
-                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-                        const parent = node.parentElement;
-                        if (!parent) return NodeFilter.FILTER_REJECT;
-                        const tag = parent.tagName;
-                        if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
-                        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                }
-            );
-            const nodes = [];
-            while (walker.nextNode()) {
-                nodes.push(walker.currentNode);
-            }
-            nodes.forEach((node) => {
-                if (toSimplified) {
-                    if (!cache.has(node)) {
-                        cache.set(node, node.nodeValue);
-                    }
-                    node.nodeValue = converter(node.nodeValue);
-                } else if (cache.has(node)) {
-                    node.nodeValue = cache.get(node);
-                } else {
-                    node.nodeValue = converter(node.nodeValue);
-                }
-            });
-        };
-
-        const applyLanguageConversion = (language, rootElement, cache) => {
-            if (window.__openccLoadError || !window.OpenCC || !rootElement) return;
-            const toSimplified = language === 'zh-CN';
-            const converter = toSimplified
-                ? OpenCC.Converter({ from: 't', to: 's' })
-                : OpenCC.Converter({ from: 's', to: 't' });
-            const walker = document.createTreeWalker(
-                rootElement,
-                NodeFilter.SHOW_TEXT,
-                {
-                    acceptNode: (node) => {
-                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-                        const parent = node.parentElement;
-                        if (!parent) return NodeFilter.FILTER_REJECT;
-                        const tag = parent.tagName;
-                        if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
-                        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                }
-            );
-            const nodes = [];
-            while (walker.nextNode()) {
-                nodes.push(walker.currentNode);
-            }
-            nodes.forEach((node) => {
-                if (toSimplified) {
-                    if (!cache.has(node)) {
-                        cache.set(node, node.nodeValue);
-                    }
-                    node.nodeValue = converter(node.nodeValue);
-                } else if (cache.has(node)) {
-                    node.nodeValue = cache.get(node);
-                } else {
-                    node.nodeValue = converter(node.nodeValue);
-                }
-            });
-        };
-
-        const applyLanguageConversion = (language, rootElement, cache) => {
-            if (!window.OpenCC || !rootElement) return;
-            const toSimplified = language === 'zh-CN';
-            const converter = toSimplified
-                ? OpenCC.Converter({ from: 't', to: 's' })
-                : OpenCC.Converter({ from: 's', to: 't' });
-            const walker = document.createTreeWalker(
-                rootElement,
-                NodeFilter.SHOW_TEXT,
-                {
-                    acceptNode: (node) => {
-                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-                        const parent = node.parentElement;
-                        if (!parent) return NodeFilter.FILTER_REJECT;
-                        const tag = parent.tagName;
-                        if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
-                        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                }
-            );
-            const nodes = [];
-            while (walker.nextNode()) {
-                nodes.push(walker.currentNode);
-            }
-            nodes.forEach((node) => {
-                if (toSimplified) {
-                    if (!cache.has(node)) {
-                        cache.set(node, node.nodeValue);
-                    }
-                    node.nodeValue = converter(node.nodeValue);
-                } else if (cache.has(node)) {
-                    node.nodeValue = cache.get(node);
-                } else {
-                    node.nodeValue = converter(node.nodeValue);
-                }
-            });
         };
 
         // --- Helper Functions ---
@@ -577,10 +455,9 @@
 
         // --- 4. Page Components (AuthPage Defined Here) ---
         
-        const AuthPage = ({ auth, error, connectionStatus, language, onToggleLanguage }) => {
+        const AuthPage = ({ auth, error, connectionStatus }) => {
             const [isLogin, setIsLogin] = useState(true);
             const [email, setEmail] = useState('');
-            const [emailPrefix, setEmailPrefix] = useState('');
             const [password, setPassword] = useState('');
             const [authError, setAuthError] = useState('');
             const [loading, setLoading] = useState(false);
@@ -610,19 +487,7 @@
                     if (isLogin) {
                         await signInWithEmailAndPassword(auth, email, password);
                     } else {
-                        const normalizedPrefix = emailPrefix.trim();
-                        if (!normalizedPrefix) {
-                            setAuthError('請輸入 Email 前綴');
-                            setLoading(false);
-                            return;
-                        }
-                        if (normalizedPrefix.includes('@')) {
-                            setAuthError('請輸入 @ 之前的前綴');
-                            setLoading(false);
-                            return;
-                        }
-                        const registerEmail = `${normalizedPrefix}@aivres.com`;
-                        await createUserWithEmailAndPassword(auth, registerEmail, password);
+                        await createUserWithEmailAndPassword(auth, email, password);
                     }
                 } catch (err) {
                     console.error("Auth Error:", err);
@@ -694,16 +559,6 @@
                 <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
                     <div className="bg-slate-900 p-8 text-center">
-                    <div className="flex justify-end mb-3">
-                        <button
-                            type="button"
-                            onClick={onToggleLanguage}
-                            className="text-xs text-slate-300 hover:text-white border border-slate-700 px-2 py-1 rounded"
-                            data-testid="language-toggle-auth"
-                        >
-                            {language === 'zh-TW' ? '切換為簡體' : '切換為繁體'}
-                        </button>
-                    </div>
                     <div className="inline-flex p-3 bg-blue-600 rounded-full mb-4 shadow-lg">
                         <Database size={32} className="text-white" />
                     </div>
@@ -715,21 +570,11 @@
                     {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
                     {!showForgot && (
                         <form onSubmit={handleSubmit} className="space-y-4">
-                        {isLogin ? (
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
-                                <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
-                            </div>
-                        ) : (
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Email 前綴</label>
-                                <div className="flex items-center gap-2">
-                                    <input type="text" required className="flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={emailPrefix} onChange={(e) => setEmailPrefix(e.target.value)} />
-                                    <span className="text-sm text-slate-500">@aivres.com</span>
-                                </div>
-                                <p className="mt-2 text-xs text-slate-500">註冊僅支援 @aivres.com 信箱，刪除帳號需使用 Aivres 信箱驗證。</p>
-                            </div>
-                        )}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
+                            <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            {!isLogin && <p className="mt-2 text-xs text-slate-500">請用Aivres信箱註冊或登錄</p>}
+                        </div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">密碼</label><input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
                         {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
                         <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}</button>
@@ -897,96 +742,6 @@
                 });
                 return () => unsubscribe();
             }, [db]);
-
-            useEffect(() => {
-                if (testConfig?.enabled) {
-                    const params = new URLSearchParams(window.location.search);
-                    const rawAssignees = params.get('testAssignees') || '';
-                    const parsed = rawAssignees
-                        .split(',')
-                        .map((item) => item.trim())
-                        .filter(Boolean);
-                    const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                    setAssigneeOptions(uniqueAssignees);
-                    return;
-                }
-                if (!db) return;
-                const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
-                const q = query(usersRef, orderBy('lastSeen', 'desc'));
-                const unsubscribe = onSnapshot(
-                    q,
-                    (snapshot) => {
-                        const options = snapshot.docs
-                            .map((docSnap) => docSnap.data()?.email)
-                            .filter(Boolean)
-                            .map((email) => formatEmailPrefix(email));
-                        const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                        setAssigneeOptions(uniqueOptions);
-                    },
-                    (error) => console.error("Error assignees:", error)
-                );
-                return () => unsubscribe();
-            }, [db, testConfig?.enabled]);
-
-            useEffect(() => {
-                if (testConfig?.enabled) {
-                    const params = new URLSearchParams(window.location.search);
-                    const rawAssignees = params.get('testAssignees') || '';
-                    const parsed = rawAssignees
-                        .split(',')
-                        .map((item) => item.trim())
-                        .filter(Boolean);
-                    const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                    setAssigneeOptions(uniqueAssignees);
-                    return;
-                }
-                if (!db) return;
-                const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
-                const q = query(usersRef, orderBy('lastSeen', 'desc'));
-                const unsubscribe = onSnapshot(
-                    q,
-                    (snapshot) => {
-                        const options = snapshot.docs
-                            .map((docSnap) => docSnap.data()?.email)
-                            .filter(Boolean)
-                            .map((email) => formatEmailPrefix(email));
-                        const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                        setAssigneeOptions(uniqueOptions);
-                    },
-                    (error) => console.error("Error assignees:", error)
-                );
-                return () => unsubscribe();
-            }, [db, testConfig?.enabled]);
-
-            useEffect(() => {
-                if (testConfig?.enabled) {
-                    const params = new URLSearchParams(window.location.search);
-                    const rawAssignees = params.get('testAssignees') || '';
-                    const parsed = rawAssignees
-                        .split(',')
-                        .map((item) => item.trim())
-                        .filter(Boolean);
-                    const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                    setAssigneeOptions(uniqueAssignees);
-                    return;
-                }
-                if (!db) return;
-                const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
-                const q = query(usersRef, orderBy('lastSeen', 'desc'));
-                const unsubscribe = onSnapshot(
-                    q,
-                    (snapshot) => {
-                        const options = snapshot.docs
-                            .map((docSnap) => docSnap.data()?.email)
-                            .filter(Boolean)
-                            .map((email) => formatEmailPrefix(email));
-                        const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-                        setAssigneeOptions(uniqueOptions);
-                    },
-                    (error) => console.error("Error assignees:", error)
-                );
-                return () => unsubscribe();
-            }, [db, testConfig?.enabled]);
 
             useEffect(() => {
                 if (testConfig?.enabled) {
@@ -1412,78 +1167,6 @@
                 return () => unsubscribe();
             }, [db, isAdmin]);
 
-            useEffect(() => {
-                if (!db || !isAdmin) return;
-                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
-                const unsubscribe = onSnapshot(
-                    notificationsRef,
-                    (docSnap) => {
-                        setNotificationError('');
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            setNotificationEnabled(Boolean(data.enabled));
-                            setNotificationTime(data.dailyTime || '09:00');
-                        } else {
-                            setNotificationEnabled(false);
-                            setNotificationTime('09:00');
-                        }
-                    },
-                    (error) => {
-                        console.error('Notification settings snapshot error:', error);
-                        setNotificationError(`讀取失敗：${error.message}`);
-                    }
-                );
-                return () => unsubscribe();
-            }, [db, isAdmin]);
-
-            useEffect(() => {
-                if (!db || !isAdmin) return;
-                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
-                const unsubscribe = onSnapshot(
-                    notificationsRef,
-                    (docSnap) => {
-                        setNotificationError('');
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            setNotificationEnabled(Boolean(data.enabled));
-                            setNotificationTime(data.dailyTime || '09:00');
-                        } else {
-                            setNotificationEnabled(false);
-                            setNotificationTime('09:00');
-                        }
-                    },
-                    (error) => {
-                        console.error('Notification settings snapshot error:', error);
-                        setNotificationError(`讀取失敗：${error.message}`);
-                    }
-                );
-                return () => unsubscribe();
-            }, [db, isAdmin]);
-
-            useEffect(() => {
-                if (!db || !isAdmin) return;
-                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
-                const unsubscribe = onSnapshot(
-                    notificationsRef,
-                    (docSnap) => {
-                        setNotificationError('');
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            setNotificationEnabled(Boolean(data.enabled));
-                            setNotificationTime(data.dailyTime || '09:00');
-                        } else {
-                            setNotificationEnabled(false);
-                            setNotificationTime('09:00');
-                        }
-                    },
-                    (error) => {
-                        console.error('Notification settings snapshot error:', error);
-                        setNotificationError(`讀取失敗：${error.message}`);
-                    }
-                );
-                return () => unsubscribe();
-            }, [db, isAdmin]);
-
             const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
                 if (!newItem.trim()) return;
                 if (list.includes(newItem.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "此選項已存在", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
@@ -1560,168 +1243,6 @@
                 }
             };
 
-            const confirmDeleteUser = (userToDelete) => {
-                setModalConfig({
-                    isOpen: true,
-                    type: 'danger',
-                    title: '確認刪除',
-                    content: `確定要刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料？`,
-                    onConfirm: () => executeDeleteUser(userToDelete),
-                    onCancel: () => setModalConfig({ isOpen: false })
-                });
-            };
-
-            const executeDeleteUser = async (userToDelete) => {
-                setModalConfig({ isOpen: false });
-                if (!userToDelete?.uid) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "無法取得使用者 UID", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                try {
-                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.uid));
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '完成', content: "已刪除使用者資料", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                }
-            };
-
-            const handleSaveNotificationSettings = async () => {
-                if (!db) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                setIsNotificationSaving(true);
-                try {
-                    await setDoc(
-                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
-                        {
-                            enabled: notificationEnabled,
-                            dailyTime: notificationTime,
-                            updatedAt: serverTimestamp(),
-                            updatedBy: user?.email || null
-                        },
-                        { merge: true }
-                    );
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                } finally {
-                    setIsNotificationSaving(false);
-                }
-            };
-
-            const confirmDeleteUser = (userToDelete) => {
-                setModalConfig({
-                    isOpen: true,
-                    type: 'danger',
-                    title: '確認刪除',
-                    content: `確定要刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料？`,
-                    onConfirm: () => executeDeleteUser(userToDelete),
-                    onCancel: () => setModalConfig({ isOpen: false })
-                });
-            };
-
-            const executeDeleteUser = async (userToDelete) => {
-                setModalConfig({ isOpen: false });
-                if (!userToDelete?.uid) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "無法取得使用者 UID", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                try {
-                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.uid));
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '完成', content: "已刪除使用者資料", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                }
-            };
-
-            const handleSaveNotificationSettings = async () => {
-                if (!db) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                setIsNotificationSaving(true);
-                try {
-                    await setDoc(
-                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
-                        {
-                            enabled: notificationEnabled,
-                            dailyTime: notificationTime,
-                            updatedAt: serverTimestamp(),
-                            updatedBy: user?.email || null
-                        },
-                        { merge: true }
-                    );
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                } finally {
-                    setIsNotificationSaving(false);
-                }
-            };
-
-            const confirmDeleteUser = (userToDelete) => {
-                setModalConfig({
-                    isOpen: true,
-                    type: 'danger',
-                    title: '確認刪除',
-                    content: `確定要刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料？`,
-                    onConfirm: () => executeDeleteUser(userToDelete),
-                    onCancel: () => setModalConfig({ isOpen: false })
-                });
-            };
-
-            const executeDeleteUser = async (userToDelete) => {
-                setModalConfig({ isOpen: false });
-                if (!userToDelete?.uid) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "無法取得使用者 UID", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                try {
-                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.uid));
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '完成', content: "已刪除使用者資料", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                }
-            };
-
-            const handleSaveNotificationSettings = async () => {
-                if (!db) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                setIsNotificationSaving(true);
-                try {
-                    await setDoc(
-                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
-                        {
-                            enabled: notificationEnabled,
-                            dailyTime: notificationTime,
-                            updatedAt: serverTimestamp(),
-                            updatedBy: user?.email || null
-                        },
-                        { merge: true }
-                    );
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                } finally {
-                    setIsNotificationSaving(false);
-                }
-            };
-
             return (
                 <div className="max-w-3xl mx-auto space-y-8 pb-12">
                     <Modal {...modalConfig} />
@@ -1731,14 +1252,14 @@
                         <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
-                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th><th className="px-4 py-3 text-right">操作</th></tr></thead>
+                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {userListError ? (
-                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
                                     ) : isUserListLoading ? (
-                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
                                     ) : allUsers.length === 0 ? (
-                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
+                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
                                     ) : (
                                         allUsers.map((u) => {
                                             const lastSeenDate = u.lastSeen?.toDate
@@ -1749,22 +1270,12 @@
                                                     <td className="px-4 py-3 font-medium text-slate-800">{formatEmailPrefix(u.email)}</td>
                                                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
                                                     <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => confirmDeleteUser(u)}
-                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </td>
                                                 </tr>
                                             );
                                         })
                                     )}
                                 </tbody>
                             </table>
-                            <p className="mt-3 text-xs text-slate-400">刪除註冊資料需使用 Aivres 信箱驗證，建議先確認該帳號用途。</p>
                         </div>
                     </div>
 
@@ -1872,8 +1383,6 @@
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
-            const [language, setLanguage] = useState('zh-TW');
-            const languageCacheRef = useRef(new Map());
 
             const testConfig = useMemo(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -2003,12 +1512,6 @@
                 registerUser();
             }, [db, user, testConfig.enabled]);
 
-            useEffect(() => {
-                const rootElement = document.getElementById('root');
-                if (!rootElement) return;
-                applyLanguageConversion(language, rootElement, languageCacheRef.current);
-            }, [language]);
-
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
@@ -2024,18 +1527,6 @@
                 alert("API Key 已內建，無需設定！");
             };
 
-            const toggleLanguage = () => {
-                setLanguage((prev) => (prev === 'zh-TW' ? 'zh-CN' : 'zh-TW'));
-            };
-
-            const toggleLanguage = () => {
-                setLanguage((prev) => (prev === 'zh-TW' ? 'zh-CN' : 'zh-TW'));
-            };
-
-            const toggleLanguage = () => {
-                setLanguage((prev) => (prev === 'zh-TW' ? 'zh-CN' : 'zh-TW'));
-            };
-
             if (isAuthChecking) {
                 return (
                     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-slate-500">
@@ -2046,15 +1537,7 @@
             }
 
             if (!user) {
-                return (
-                    <AuthPage
-                        auth={auth}
-                        error={error}
-                        connectionStatus={connectionStatus}
-                        language={language}
-                        onToggleLanguage={toggleLanguage}
-                    />
-                );
+                return <AuthPage auth={auth} error={error} connectionStatus={connectionStatus} />;
             }
 
             return (
@@ -2083,14 +1566,6 @@
                             )}
                         </nav>
                         <div className="p-4 bg-slate-800 border-t border-slate-700">
-                            <button
-                                type="button"
-                                onClick={toggleLanguage}
-                                className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3"
-                                data-testid="language-toggle"
-                            >
-                                {language === 'zh-TW' ? '切換為簡體' : '切換為繁體'}
-                            </button>
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
                                     {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
