@@ -1,0 +1,8 @@
+{
+  "name": "job-management-system",
+  "version": "v2.3.9",
+  "private": true,
+  "scripts": {
+    "test": "pytest tests/e2e"
+  }
+}
