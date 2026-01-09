@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.3.9</title>
+    <title>工作紀錄中心 v2.4.0</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,6 +11,7 @@
 
     <!-- 2. 引入 React 和 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
     
     <!-- 設定 Tailwind -->
     <script>
@@ -99,7 +100,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.3.9"; // Updated: firebase connection status
+        const APP_VERSION = "v2.4.0"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -200,6 +201,63 @@
                 console.error('Fallback: Oops, unable to copy', err);
             }
             document.body.removeChild(textArea);
+        };
+
+        const TRANSLATABLE_ATTRIBUTES = ['placeholder', 'title', 'aria-label', 'aria-placeholder', 'alt'];
+        const SKIP_TEXT_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION']);
+
+        const shouldSkipTextNode = (node) => {
+            if (!node || !node.parentElement) return true;
+            return SKIP_TEXT_TAGS.has(node.parentElement.tagName);
+        };
+
+        const applyTranslationToTextNode = (node, language, converter, originalTextMap) => {
+            if (!node || node.nodeType !== Node.TEXT_NODE || shouldSkipTextNode(node)) return;
+            const currentText = node.nodeValue || '';
+            if (!currentText.trim()) return;
+            if (!originalTextMap.has(node)) {
+                originalTextMap.set(node, currentText);
+            }
+            const originalText = originalTextMap.get(node);
+            if (language === 'zh-CN' && converter) {
+                node.nodeValue = converter(originalText);
+            } else {
+                node.nodeValue = originalText;
+            }
+        };
+
+        const applyTranslationToAttributes = (element, language, converter, originalAttrMap) => {
+            if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+            const existingAttrMap = originalAttrMap.get(element) || new Map();
+            TRANSLATABLE_ATTRIBUTES.forEach((attr) => {
+                const value = element.getAttribute(attr);
+                if (!value) return;
+                if (!existingAttrMap.has(attr)) {
+                    existingAttrMap.set(attr, value);
+                }
+                const originalValue = existingAttrMap.get(attr);
+                if (language === 'zh-CN' && converter) {
+                    element.setAttribute(attr, converter(originalValue));
+                } else {
+                    element.setAttribute(attr, originalValue);
+                }
+            });
+            if (existingAttrMap.size) {
+                originalAttrMap.set(element, existingAttrMap);
+            }
+        };
+
+        const applyPageTranslation = ({ root, language, converter, originalTextMap, originalAttrMap }) => {
+            if (!root) return;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            let currentNode = walker.nextNode();
+            while (currentNode) {
+                applyTranslationToTextNode(currentNode, language, converter, originalTextMap);
+                currentNode = walker.nextNode();
+            }
+            root.querySelectorAll(TRANSLATABLE_ATTRIBUTES.map(attr => `[${attr}]`).join(',')).forEach((element) => {
+                applyTranslationToAttributes(element, language, converter, originalAttrMap);
+            });
         };
 
         const extractContentForAI = (htmlContent) => {
@@ -1221,6 +1279,13 @@
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
+            const [language, setLanguage] = useState('zh-TW');
+
+            const originalTextMapRef = useRef(new WeakMap());
+            const originalAttrMapRef = useRef(new WeakMap());
+            const translationObserverRef = useRef(null);
+            const converterRef = useRef(null);
+            const originalTitleRef = useRef(document.title);
 
             const testConfig = useMemo(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -1229,6 +1294,50 @@
                     userEmail: params.get('testUserEmail')
                 };
             }, []);
+
+            useEffect(() => {
+                const root = document.getElementById('root');
+                if (!root) return;
+                if (language === 'zh-CN' && !converterRef.current && window.OpenCC) {
+                    converterRef.current = OpenCC.Converter({ from: 't', to: 's' });
+                }
+                const converter = language === 'zh-CN' ? converterRef.current : null;
+                applyPageTranslation({
+                    root,
+                    language,
+                    converter,
+                    originalTextMap: originalTextMapRef.current,
+                    originalAttrMap: originalAttrMapRef.current
+                });
+                if (originalTitleRef.current) {
+                    document.title = language === 'zh-CN' && converter
+                        ? converter(originalTitleRef.current)
+                        : originalTitleRef.current;
+                }
+
+                if (translationObserverRef.current) {
+                    translationObserverRef.current.disconnect();
+                }
+                const observer = new MutationObserver(() => {
+                    if (language !== 'zh-CN' || !converterRef.current) return;
+                    applyPageTranslation({
+                        root,
+                        language,
+                        converter: converterRef.current,
+                        originalTextMap: originalTextMapRef.current,
+                        originalAttrMap: originalAttrMapRef.current
+                    });
+                });
+                observer.observe(root, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true,
+                    attributes: true,
+                    attributeFilter: TRANSLATABLE_ATTRIBUTES
+                });
+                translationObserverRef.current = observer;
+                return () => observer.disconnect();
+            }, [language]);
             
             useEffect(() => {
                 if (testConfig.enabled) {
@@ -1390,6 +1499,29 @@
                             <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-2" data-testid="firebase-status">
                                 <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
                                 <span>Firebase 連線狀態：{connectionStatus}</span>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2">
+                                <span className="text-xs text-slate-400">語言</span>
+                                <div className="inline-flex rounded-lg bg-slate-800 p-1" data-testid="language-toggle">
+                                    <button
+                                        type="button"
+                                        data-testid="language-toggle-traditional"
+                                        onClick={() => setLanguage('zh-TW')}
+                                        aria-pressed={language === 'zh-TW'}
+                                        className={`px-2 py-1 text-xs rounded-md transition ${language === 'zh-TW' ? 'bg-white text-slate-900' : 'text-slate-300 hover:text-white'}`}
+                                    >
+                                        繁體
+                                    </button>
+                                    <button
+                                        type="button"
+                                        data-testid="language-toggle-simplified"
+                                        onClick={() => setLanguage('zh-CN')}
+                                        aria-pressed={language === 'zh-CN'}
+                                        className={`px-2 py-1 text-xs rounded-md transition ${language === 'zh-CN' ? 'bg-white text-slate-900' : 'text-slate-300 hover:text-white'}`}
+                                    >
+                                        簡體
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <nav className="p-4 space-y-2 flex-1">

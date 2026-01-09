@@ -5,11 +5,14 @@ const isChromiumAvailable = fs.existsSync(chromium.executablePath());
 
 test.skip(!isChromiumAvailable, 'Playwright 瀏覽器未安裝，略過 E2E 測試');
 
-test('顯示 Firebase 連線狀態並允許測試模式登入', async ({ page }) => {
+test('切換全頁繁簡轉換', async ({ page }) => {
   await page.goto('/index.html?testMode=1&testUserEmail=playwright@example.com');
 
   await expect(page.getByRole('heading', { name: '工作紀錄中心' })).toBeVisible();
-  const status = page.getByTestId('firebase-status');
-  await expect(status).toContainText('Firebase 連線狀態');
-  await expect(status).toContainText('測試模式');
+
+  await page.getByTestId('language-toggle-simplified').click();
+  await expect(page.getByRole('heading', { name: '工作纪录中心' })).toBeVisible();
+
+  await page.getByTestId('language-toggle-traditional').click();
+  await expect(page.getByRole('heading', { name: '工作紀錄中心' })).toBeVisible();
 });
