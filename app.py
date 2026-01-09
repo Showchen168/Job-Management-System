@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.5.2"
+APP_VERSION = "v2.5.3"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 
 
 @dataclass(frozen=True)
 class NotificationSettings:
-    daily_time: str
+    dailyTime: str  # Fixed: Aligned with frontend field name (dailyTime)
     enabled: bool = True
 
 
@@ -17,7 +17,7 @@ def get_version():
 
 
 def validate_version(version):
-    if not re.fullmatch(r"v\d+\.\d+\.[0-9]", version):
+    if not re.fullmatch(r"v\d+\.\d+\.[0-9]+", version): # Slightly improved regex for patch versions
         raise ValueError("版本格式不正確")
     return True
 
@@ -93,6 +93,8 @@ def format_notification_email(assignee_email, tasks, notify_date):
 
 
 def should_send_notification(now, daily_time, last_sent_date=None):
+    # Note: Keep argument name as daily_time for internal logic, 
+    # but the value will come from settings.dailyTime
     scheduled_time = parse_notification_time(daily_time)
     target = datetime.combine(now.date(), scheduled_time)
     if now < target:
@@ -117,7 +119,8 @@ def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sen
     if not settings or not settings.enabled:
         return []
     now = now or datetime.now()
-    if not should_send_notification(now, settings.daily_time, last_sent_date):
+    # Fixed: Access .dailyTime instead of .daily_time
+    if not should_send_notification(now, settings.dailyTime, last_sent_date):
         return []
     return prepare_notification_payloads(tasks, user_emails, notify_date=now.date())
 
