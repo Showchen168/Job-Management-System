@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.4.1"
+APP_VERSION = "v2.5.0"
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 
 
@@ -95,6 +95,15 @@ def prepare_notification_payloads(tasks, user_emails, notify_date=None):
         subject, body = format_notification_email(assignee_email, assignee_tasks, notify_date)
         payloads.append({"to": assignee_email, "subject": subject, "body": body})
     return payloads
+
+
+def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sent_date=None):
+    if not settings or not settings.enabled:
+        return []
+    now = now or datetime.now()
+    if not should_send_notification(now, settings.daily_time, last_sent_date):
+        return []
+    return prepare_notification_payloads(tasks, user_emails, notify_date=now.date())
 
 
 if __name__ == "__main__":

@@ -3,11 +3,13 @@ from datetime import date, datetime
 import pytest
 
 from app import (
+    NotificationSettings,
     build_on_going_notifications,
     parse_notification_time,
     prepare_notification_payloads,
     resolve_assignee_email,
     should_send_notification,
+    trigger_daily_notifications,
 )
 
 
@@ -50,3 +52,28 @@ def test_should_send_notification_respects_daily_schedule():
     now = datetime(2024, 1, 1, 9, 0)
     assert should_send_notification(now, "09:00") is True
     assert should_send_notification(now, "09:00", last_sent_date=date(2024, 1, 1)) is False
+
+
+def test_trigger_daily_notifications_returns_payloads_when_enabled():
+    settings = NotificationSettings(daily_time="09:00", enabled=True)
+    tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
+    payloads = trigger_daily_notifications(
+        settings,
+        tasks,
+        ["alice@example.com"],
+        now=datetime(2024, 1, 1, 9, 30),
+    )
+    assert payloads
+    assert payloads[0]["to"] == "alice@example.com"
+
+
+def test_trigger_daily_notifications_skips_when_disabled():
+    settings = NotificationSettings(daily_time="09:00", enabled=False)
+    tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
+    payloads = trigger_daily_notifications(
+        settings,
+        tasks,
+        ["alice@example.com"],
+        now=datetime(2024, 1, 1, 9, 30),
+    )
+    assert payloads == []
