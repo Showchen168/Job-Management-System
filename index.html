@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3.7</title>
+    <title>工作紀錄中心 v2.3.8</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -99,7 +99,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3.7"; // Updated: assignee status breakdown
+        const APP_VERSION = "v2.3.8"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -433,7 +433,7 @@
 
         // --- 4. Page Components (AuthPage Defined Here) ---
         
-        const AuthPage = ({ auth, error }) => {
+        const AuthPage = ({ auth, error, connectionStatus }) => {
             const [isLogin, setIsLogin] = useState(true);
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
@@ -542,6 +542,7 @@
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-2">工作紀錄中心</h1>
                     <p className="text-slate-400 text-sm">請登入以存取您的工作資料</p>
+                    <p className="text-xs text-slate-500 mt-2" data-testid="firebase-status-auth">Firebase 連線狀態：{connectionStatus}</p>
                     </div>
                     <div className="p-8">
                     {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
@@ -1210,12 +1211,26 @@
             const [auth, setAuth] = useState(null);
             const [user, setUser] = useState(null);
             const [error, setError] = useState(null);
-            const [statusMsg, setStatusMsg] = useState('初始化中...');
+            const [connectionStatus, setConnectionStatus] = useState('初始化中...');
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
+
+            const testConfig = useMemo(() => {
+                const params = new URLSearchParams(window.location.search);
+                return {
+                    enabled: params.get('testMode') === '1',
+                    userEmail: params.get('testUserEmail')
+                };
+            }, []);
             
             useEffect(() => {
+                if (testConfig.enabled) {
+                    setUser({ uid: 'test-mode', email: testConfig.userEmail || null });
+                    setConnectionStatus('測試模式');
+                    setIsAuthChecking(false);
+                    return;
+                }
                 const initFirebase = async () => {
                     try {
                         const APP_NAME = 'work-tracker-app';
@@ -1231,19 +1246,49 @@
                         setAppInstance(app);
                         setAuth(authInstance);
                         setDb(dbInstance);
+                        setConnectionStatus(navigator.onLine ? '連線中...' : '離線');
                         onAuthStateChanged(authInstance, (u) => {
                             setUser(u);
                             setIsAuthChecking(false);
-                            setStatusMsg(u ? '已連線' : '請先登入');
                         });
                     } catch (err) {
                         console.error("Firebase Init Error:", err);
                         setError(`連線錯誤: ${err.message}`);
+                        setConnectionStatus('連線錯誤');
                         setIsAuthChecking(false);
                     }
                 };
                 initFirebase();
-            }, []);
+            }, [testConfig.enabled, testConfig.userEmail]);
+
+            useEffect(() => {
+                if (!db || testConfig.enabled) return;
+                const statusRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'connection');
+                const unsubscribe = onSnapshot(
+                    statusRef,
+                    { includeMetadataChanges: true },
+                    (docSnap) => {
+                        if (docSnap.metadata.fromCache) {
+                            setConnectionStatus(navigator.onLine ? '離線（快取）' : '離線');
+                        } else {
+                            setConnectionStatus('已連線');
+                        }
+                    },
+                    (err) => {
+                        console.error("Firebase Connection Error:", err);
+                        setConnectionStatus('連線錯誤');
+                    }
+                );
+                const handleOnline = () => setConnectionStatus('連線中...');
+                const handleOffline = () => setConnectionStatus('離線');
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+                return () => {
+                    unsubscribe();
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
+            }, [db, testConfig.enabled]);
 
             useEffect(() => {
                 if (!db) return;
@@ -1272,6 +1317,7 @@
             }, [db]);
 
             useEffect(() => {
+                if (testConfig.enabled) return;
                 if (!db || !user || !user.uid) return;
                 const registerUser = async () => {
                     try {
@@ -1296,11 +1342,17 @@
                     }
                 };
                 registerUser();
-            }, [db, user]);
+            }, [db, user, testConfig.enabled]);
 
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
+            const connectionIndicatorClass = useMemo(() => {
+                if (connectionStatus.includes('已連線')) return 'bg-emerald-400';
+                if (connectionStatus.includes('離線')) return 'bg-red-400';
+                if (connectionStatus.includes('測試模式')) return 'bg-amber-400';
+                return 'bg-slate-400';
+            }, [connectionStatus]);
 
             const handleSaveGeminiKey = (key) => {
                 alert("API Key 已內建，無需設定！");
@@ -1316,7 +1368,7 @@
             }
 
             if (!user) {
-                return <AuthPage auth={auth} error={error} />;
+                return <AuthPage auth={auth} error={error} connectionStatus={connectionStatus} />;
             }
 
             return (
@@ -1328,6 +1380,10 @@
                                 工作紀錄中心
                             </h1>
                             <p className="text-xs text-slate-400 mt-2">Firebase 雲端同步版</p>
+                            <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-2" data-testid="firebase-status">
+                                <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
+                                <span>Firebase 連線狀態：{connectionStatus}</span>
+                            </div>
                         </div>
                         <nav className="p-4 space-y-2 flex-1">
                             <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
@@ -1359,9 +1415,11 @@
                                 </div>
                             </div>
                             
-                            <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3">
-                                <LogOut size={14} /> 登出
-                            </button>
+                            {!testConfig.enabled && auth && (
+                                <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3">
+                                    <LogOut size={14} /> 登出
+                                </button>
+                            )}
 
                             <div className="pt-3 border-t border-slate-700 text-[10px] text-slate-500 text-center">
                                 <p>System Creator: {SYSTEM_CREATOR}</p>
