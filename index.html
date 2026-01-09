@@ -101,6 +101,7 @@
         const SYSTEM_CREATOR = "Show";
         const APP_VERSION = "v2.4.1"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
+        const AIVRES_EMAIL_DOMAIN = "@aivres.com";
 
         // --- 1. Firebase Configuration ---
         const DEFAULT_CONFIG = {
@@ -458,6 +459,7 @@
         const AuthPage = ({ auth, error, connectionStatus }) => {
             const [isLogin, setIsLogin] = useState(true);
             const [email, setEmail] = useState('');
+            const [emailPrefix, setEmailPrefix] = useState('');
             const [password, setPassword] = useState('');
             const [authError, setAuthError] = useState('');
             const [loading, setLoading] = useState(false);
@@ -487,7 +489,19 @@
                     if (isLogin) {
                         await signInWithEmailAndPassword(auth, email, password);
                     } else {
-                        await createUserWithEmailAndPassword(auth, email, password);
+                        const normalizedPrefix = emailPrefix.trim();
+                        if (!normalizedPrefix) {
+                            setAuthError('請輸入 Email 前綴');
+                            setLoading(false);
+                            return;
+                        }
+                        if (normalizedPrefix.includes('@') || !/^[A-Za-z0-9._%+-]+$/.test(normalizedPrefix)) {
+                            setAuthError('Email 前綴格式不正確');
+                            setLoading(false);
+                            return;
+                        }
+                        const registerEmail = `${normalizedPrefix}${AIVRES_EMAIL_DOMAIN}`;
+                        await createUserWithEmailAndPassword(auth, registerEmail, password);
                     }
                 } catch (err) {
                     console.error("Auth Error:", err);
@@ -572,8 +586,22 @@
                         <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
-                            <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
-                            {!isLogin && <p className="mt-2 text-xs text-slate-500">請用Aivres信箱註冊或登錄</p>}
+                            {isLogin ? (
+                                <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            ) : (
+                                <div className="flex items-center rounded-lg border border-slate-300 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition">
+                                    <input
+                                        type="text"
+                                        required
+                                        className="w-full p-3 outline-none"
+                                        placeholder="輸入 Email 前綴"
+                                        value={emailPrefix}
+                                        onChange={(e) => setEmailPrefix(e.target.value)}
+                                    />
+                                    <span className="px-3 text-slate-500 bg-slate-50 border-l border-slate-200">{AIVRES_EMAIL_DOMAIN}</span>
+                                </div>
+                            )}
+                            {!isLogin && <p className="mt-2 text-xs text-slate-500">系統會自動補上公司信箱網域。</p>}
                         </div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">密碼</label><input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
                         {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
@@ -608,7 +636,20 @@
                         <button type="button" onClick={() => { setShowForgot(false); setResetMessage(''); setResetError(''); setResetCode(''); }} className="w-full text-sm text-slate-500 hover:underline">返回登入</button>
                         </form>
                     )}
-                    <div className="mt-6 text-center text-sm text-slate-500">{isLogin ? '還沒有帳號？' : '已經有帳號了？'}<button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="ml-2 text-blue-600 font-bold hover:underline">{isLogin ? '立即註冊' : '返回登入'}</button></div>
+                    <div className="mt-6 text-center text-sm text-slate-500">
+                        {isLogin ? '還沒有帳號？' : '已經有帳號了？'}
+                        <button
+                            onClick={() => {
+                                setIsLogin(!isLogin);
+                                setAuthError('');
+                                setEmail('');
+                                setEmailPrefix('');
+                            }}
+                            className="ml-2 text-blue-600 font-bold hover:underline"
+                        >
+                            {isLogin ? '立即註冊' : '返回登入'}
+                        </button>
+                    </div>
                     </div>
                 </div>
                 </div>
@@ -1096,6 +1137,7 @@
             const [notificationTime, setNotificationTime] = useState('09:00');
             const [notificationError, setNotificationError] = useState('');
             const [isNotificationSaving, setIsNotificationSaving] = useState(false);
+            const userTableColSpan = isAdmin ? 4 : 3;
 
             useEffect(() => {
                 if (!db) return;
@@ -1128,7 +1170,8 @@
                             return {
                                 ...data,
                                 uid: data.uid || docSnap.id,
-                                email: data.email || '(未填寫)'
+                                email: data.email || '(未填寫)',
+                                docId: docSnap.id
                             };
                         });
                         setAllUsers(users);
@@ -1184,6 +1227,36 @@
                     else { updatedList = list.filter(c => c !== itemToDelete); }
                     await setDoc(settingsRef, { [field]: updatedList }, { merge: true });
                 } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmDeleteUser = (userToDelete) => {
+                if (!isAdmin) return;
+                const label = formatEmailPrefix(userToDelete.email);
+                setModalConfig({
+                    isOpen: true,
+                    type: 'danger',
+                    title: '刪除使用者',
+                    content: `確定要刪除 ${label} 的註冊資料嗎？此操作僅會移除登入清單記錄。`,
+                    onConfirm: () => executeDeleteUser(userToDelete),
+                    onCancel: () => setModalConfig({ isOpen: false })
+                });
+            };
+            const executeDeleteUser = async (userToDelete) => {
+                if (!db || !userToDelete?.docId) return;
+                setModalConfig({ isOpen: false });
+                try {
+                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.docId));
+                    setModalConfig({
+                        isOpen: true,
+                        type: 'confirm',
+                        title: '刪除成功',
+                        content: `已刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料。`,
+                        onConfirm: () => setModalConfig({ isOpen: false }),
+                        confirmText: "好",
+                        onCancel: null
+                    });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
             };
             const handleAddAdmin = async () => {
                 if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "Email 格式錯誤", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
@@ -1252,24 +1325,46 @@
                         <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
-                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th></tr></thead>
+                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th className="px-4 py-3">Email</th>
+                                        <th className="px-4 py-3">User UID</th>
+                                        <th className="px-4 py-3">最後上線</th>
+                                        {isAdmin && <th className="px-4 py-3 text-right">操作</th>}
+                                    </tr>
+                                </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {userListError ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
+                                        <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
                                     ) : isUserListLoading ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
+                                        <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
                                     ) : allUsers.length === 0 ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
+                                        <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
                                     ) : (
                                         allUsers.map((u) => {
                                             const lastSeenDate = u.lastSeen?.toDate
                                                 ? u.lastSeen.toDate()
                                                 : (u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000) : null);
+                                            const isSelf = user?.email && u.email === user.email;
+                                            const isRootAdmin = rootAdmins.includes(u.email);
+                                            const canDelete = isAdmin && !isSelf && !isRootAdmin;
                                             return (
                                                 <tr key={u.uid} className="hover:bg-slate-50">
                                                     <td className="px-4 py-3 font-medium text-slate-800">{formatEmailPrefix(u.email)}</td>
                                                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
                                                     <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
+                                                    {isAdmin && (
+                                                        <td className="px-4 py-3 text-right">
+                                                            <button
+                                                                onClick={() => canDelete && confirmDeleteUser(u)}
+                                                                disabled={!canDelete}
+                                                                className={`p-1 rounded transition ${canDelete ? 'text-red-500 hover:text-red-700 hover:bg-red-50' : 'text-slate-300 cursor-not-allowed'}`}
+                                                                title={canDelete ? '刪除使用者' : (isSelf ? '不可刪除自己' : '不可刪除系統管理員')}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             );
                                         })
