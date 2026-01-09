@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.5.1"
+APP_VERSION = "v2.5.2"
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 
 
@@ -20,6 +20,21 @@ def validate_version(version):
     if not re.fullmatch(r"v\d+\.\d+\.[0-9]", version):
         raise ValueError("版本格式不正確")
     return True
+
+
+def normalize_last_sent_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
 
 
 def parse_notification_time(value):
@@ -82,7 +97,8 @@ def should_send_notification(now, daily_time, last_sent_date=None):
     target = datetime.combine(now.date(), scheduled_time)
     if now < target:
         return False
-    if last_sent_date and last_sent_date == now.date():
+    normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
+    if normalized_last_sent_date and normalized_last_sent_date == now.date():
         return False
     return True
 
