@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.4.3</title>
+    <title>工作紀錄中心 v2.4.1</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -104,7 +104,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.4.3"; // Updated: firebase connection status
+        const APP_VERSION = "v2.4.1"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -136,6 +136,45 @@
             if (!email) return '使用者';
             const [prefix] = email.split('@');
             return prefix || email;
+        };
+
+        const applyLanguageConversion = (language, rootElement, cache) => {
+            if (window.__openccLoadError || !window.OpenCC || !rootElement) return;
+            const toSimplified = language === 'zh-CN';
+            const converter = toSimplified
+                ? OpenCC.Converter({ from: 't', to: 's' })
+                : OpenCC.Converter({ from: 's', to: 't' });
+            const walker = document.createTreeWalker(
+                rootElement,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: (node) => {
+                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                        const parent = node.parentElement;
+                        if (!parent) return NodeFilter.FILTER_REJECT;
+                        const tag = parent.tagName;
+                        if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
+                        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+            const nodes = [];
+            while (walker.nextNode()) {
+                nodes.push(walker.currentNode);
+            }
+            nodes.forEach((node) => {
+                if (toSimplified) {
+                    if (!cache.has(node)) {
+                        cache.set(node, node.nodeValue);
+                    }
+                    node.nodeValue = converter(node.nodeValue);
+                } else if (cache.has(node)) {
+                    node.nodeValue = cache.get(node);
+                } else {
+                    node.nodeValue = converter(node.nodeValue);
+                }
+            });
         };
 
         const applyLanguageConversion = (language, rootElement, cache) => {
@@ -950,6 +989,36 @@
             }, [db, testConfig?.enabled]);
 
             useEffect(() => {
+                if (testConfig?.enabled) {
+                    const params = new URLSearchParams(window.location.search);
+                    const rawAssignees = params.get('testAssignees') || '';
+                    const parsed = rawAssignees
+                        .split(',')
+                        .map((item) => item.trim())
+                        .filter(Boolean);
+                    const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                    setAssigneeOptions(uniqueAssignees);
+                    return;
+                }
+                if (!db) return;
+                const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
+                const q = query(usersRef, orderBy('lastSeen', 'desc'));
+                const unsubscribe = onSnapshot(
+                    q,
+                    (snapshot) => {
+                        const options = snapshot.docs
+                            .map((docSnap) => docSnap.data()?.email)
+                            .filter(Boolean)
+                            .map((email) => formatEmailPrefix(email));
+                        const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                        setAssigneeOptions(uniqueOptions);
+                    },
+                    (error) => console.error("Error assignees:", error)
+                );
+                return () => unsubscribe();
+            }, [db, testConfig?.enabled]);
+
+            useEffect(() => {
                 let res = tasks;
                 if (filterStatus !== 'All') { res = res.filter(t => t.status === filterStatus); }
                 if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(t => t.title.toLowerCase().includes(lowerQ) || (t.assignee && t.assignee.toLowerCase().includes(lowerQ)) || (t.createdByEmail && t.createdByEmail.toLowerCase().includes(lowerQ))); }
@@ -1391,6 +1460,30 @@
                 return () => unsubscribe();
             }, [db, isAdmin]);
 
+            useEffect(() => {
+                if (!db || !isAdmin) return;
+                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
+                const unsubscribe = onSnapshot(
+                    notificationsRef,
+                    (docSnap) => {
+                        setNotificationError('');
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            setNotificationEnabled(Boolean(data.enabled));
+                            setNotificationTime(data.dailyTime || '09:00');
+                        } else {
+                            setNotificationEnabled(false);
+                            setNotificationTime('09:00');
+                        }
+                    },
+                    (error) => {
+                        console.error('Notification settings snapshot error:', error);
+                        setNotificationError(`讀取失敗：${error.message}`);
+                    }
+                );
+                return () => unsubscribe();
+            }, [db, isAdmin]);
+
             const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
                 if (!newItem.trim()) return;
                 if (list.includes(newItem.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "此選項已存在", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
@@ -1436,6 +1529,60 @@
                 const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
                 try { const snapshot = await getDoc(editorsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(editorsRef, { list: updatedList }, { merge: true }); } }
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            const handleSaveNotificationSettings = async () => {
+                if (!db) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                setIsNotificationSaving(true);
+                try {
+                    await setDoc(
+                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
+                        {
+                            enabled: notificationEnabled,
+                            dailyTime: notificationTime,
+                            updatedAt: serverTimestamp(),
+                            updatedBy: user?.email || null
+                        },
+                        { merge: true }
+                    );
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                } finally {
+                    setIsNotificationSaving(false);
+                }
+            };
+
+            const confirmDeleteUser = (userToDelete) => {
+                setModalConfig({
+                    isOpen: true,
+                    type: 'danger',
+                    title: '確認刪除',
+                    content: `確定要刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料？`,
+                    onConfirm: () => executeDeleteUser(userToDelete),
+                    onCancel: () => setModalConfig({ isOpen: false })
+                });
+            };
+
+            const executeDeleteUser = async (userToDelete) => {
+                setModalConfig({ isOpen: false });
+                if (!userToDelete?.uid) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "無法取得使用者 UID", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                try {
+                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.uid));
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '完成', content: "已刪除使用者資料", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
             };
 
             const handleSaveNotificationSettings = async () => {
@@ -1875,6 +2022,10 @@
 
             const handleSaveGeminiKey = (key) => {
                 alert("API Key 已內建，無需設定！");
+            };
+
+            const toggleLanguage = () => {
+                setLanguage((prev) => (prev === 'zh-TW' ? 'zh-CN' : 'zh-TW'));
             };
 
             const toggleLanguage = () => {
