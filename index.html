@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3.3</title>
+    <title>工作紀錄中心 V2.3.4</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3.3"; // Updated: user login registry tracking
+        const APP_VERSION = "V2.3.4"; // Updated: editor role access
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -113,6 +113,11 @@
         const checkIsAdmin = (user, cloudAdmins = []) => {
             if (!user || !user.email) return false;
             return ROOT_ADMINS.includes(user.email) || cloudAdmins.includes(user.email);
+        };
+
+        const checkIsEditor = (user, cloudEditors = []) => {
+            if (!user || !user.email) return false;
+            return cloudEditors.includes(user.email);
         };
 
         // --- Helper Functions ---
@@ -475,13 +480,13 @@
             );
         };
 
-        const Dashboard = ({ db, user, isAdmin }) => {
+        const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
             const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {} });
             const [meetingStats, setMeetingStats] = useState({ total: 0, byCategory: {} });
 
             useEffect(() => {
                 if (!db || !user) return;
-                const qTasks = isAdmin 
+                const qTasks = canAccessAll 
                     ? query(collectionGroup(db, 'tasks')) 
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
                 const unsubTasks = onSnapshot(qTasks, (snapshot) => {
@@ -493,7 +498,7 @@
                     });
                     setTaskStats({ total: t, byStatus: statuses, bySource: sources });
                 });
-                const qMeetings = isAdmin
+                const qMeetings = canAccessAll
                     ? query(collectionGroup(db, 'meetings'))
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings'));
                 const unsubMeetings = onSnapshot(qMeetings, (snapshot) => {
@@ -505,11 +510,11 @@
                     setMeetingStats({ total: t, byCategory: cats });
                 });
                 return () => { unsubTasks(); unsubMeetings(); };
-            }, [db, user, isAdmin]);
+            }, [db, user, canAccessAll]);
 
             return (
                 <div className="space-y-6 animate-in fade-in">
-                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> 數據看板</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View (All Data)</span>}</div>
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> 數據看板</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View (All Data)' : 'Editor View (All Data)'}</span>}</div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><div className="text-slate-500 text-sm font-bold uppercase mb-2">總待辦事項</div><div className="text-4xl font-bold text-slate-800">{taskStats.total}</div></div>
                         {Object.entries(taskStats.byStatus).slice(0, 3).map(([status, count], i) => {
@@ -532,7 +537,7 @@
             );
         };
 
-        const TaskManager = ({ db, user, isAdmin }) => {
+        const TaskManager = ({ db, user, canAccessAll, isAdmin }) => {
             const [tasks, setTasks] = useState([]);
             const [filteredTasks, setFilteredTasks] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -548,7 +553,7 @@
             
             useEffect(() => {
                 if (!db || !user) return;
-                const q = isAdmin 
+                const q = canAccessAll 
                     ? query(collectionGroup(db, 'tasks'))
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
                 const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -557,7 +562,7 @@
                 setTasks(data);
                 }, (error) => console.error("Error tasks:", error));
                 return () => unsubscribe();
-            }, [db, user, isAdmin]);
+            }, [db, user, canAccessAll]);
 
             useEffect(() => {
                 if (!db) return;
@@ -684,7 +689,7 @@
                 <div className="space-y-6 animate-in fade-in">
                 <Modal {...modalConfig} />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View</span>}</div>
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-full sm:w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
@@ -711,7 +716,7 @@
             );
         };
 
-        const MeetingMinutes = ({ db, user, isAdmin, isRootAdmin }) => {
+        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin }) => {
             const [meetings, setMeetings] = useState([]);
             const [filteredMeetings, setFilteredMeetings] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -724,7 +729,7 @@
 
             useEffect(() => {
                 if (!db || !user) return;
-                const q = isAdmin
+                const q = canAccessAll
                     ? query(collectionGroup(db, 'meetings'))
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'meetings'));
                 const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -733,7 +738,7 @@
                 setMeetings(data);
                 }, (error) => console.error(error));
                 return () => unsubscribe();
-            }, [db, user, isAdmin]);
+            }, [db, user, canAccessAll]);
 
             useEffect(() => {
                 if (!db) return;
@@ -844,7 +849,7 @@
                 <div className="space-y-6 animate-in fade-in">
                 <Modal {...modalConfig} />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{isAdmin && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold">Admin View</span>}</div>
+                    <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                         {isAdmin && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
@@ -865,7 +870,7 @@
             );
         };
 
-        const SettingsPage = ({ db, user, isAdmin, cloudAdmins, rootAdmins, onSaveGeminiKey }) => {
+        const SettingsPage = ({ db, user, isAdmin, cloudAdmins, cloudEditors, rootAdmins, onSaveGeminiKey }) => {
             const [newCategory, setNewCategory] = useState('');
             const [categories, setCategories] = useState([]);
             const [newTaskSource, setNewTaskSource] = useState('');
@@ -873,6 +878,7 @@
             const [newTaskStatus, setNewTaskStatus] = useState('');
             const [taskStatuses, setTaskStatuses] = useState([]);
             const [newAdminEmail, setNewAdminEmail] = useState('');
+            const [newEditorEmail, setNewEditorEmail] = useState('');
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [allUsers, setAllUsers] = useState([]);
             const [isUserListLoading, setIsUserListLoading] = useState(false);
@@ -956,6 +962,21 @@
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
 
+            const handleAddEditor = async () => {
+                if (!newEditorEmail.trim() || !newEditorEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "Email 格式錯誤", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (cloudEditors.includes(newEditorEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是編輯者", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (cloudAdmins.includes(newEditorEmail.trim()) || rootAdmins.includes(newEditorEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors'), { list: arrayUnion(newEditorEmail.trim()) }, { merge: true }); setNewEditorEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newEditorEmail} 新增為編輯者`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmRemoveEditor = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${emailToRemove} 的編輯者權限？`, onConfirm: () => executeRemoveEditor(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const executeRemoveEditor = async (emailToRemove) => {
+                setModalConfig({ isOpen: false });
+                const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
+                try { const snapshot = await getDoc(editorsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(editorsRef, { list: updatedList }, { merge: true }); } }
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
             return (
                 <div className="max-w-3xl mx-auto space-y-8 pb-12">
                     <Modal {...modalConfig} />
@@ -1001,6 +1022,15 @@
                         </div>
                     )}
 
+                    {/* Editor Management Panel */}
+                    {isAdmin && (
+                        <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200">
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料，但不可使用 AI 與系統設定</p></div></div>
+                            <div className="flex gap-2 mb-6"><input value={newEditorEmail} onChange={(e) => setNewEditorEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddEditor()} /><button onClick={handleAddEditor} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap">新增編輯者</button></div>
+                            <div className="bg-white rounded-lg border border-blue-200 overflow-hidden"><ul className="divide-y divide-blue-100">{cloudEditors.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無編輯者</li>) : cloudEditors.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-blue-600"/> {email}</span><button onClick={() => confirmRemoveEditor(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                        </div>
+                    )}
+
                     {/* Global Options: Meeting Categories */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
                         <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-emerald-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
@@ -1037,6 +1067,7 @@
             const [statusMsg, setStatusMsg] = useState('初始化中...');
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
+            const [cloudEditors, setCloudEditors] = useState([]);
             
             useEffect(() => {
                 const initFirebase = async () => {
@@ -1082,6 +1113,19 @@
             }, [db]);
 
             useEffect(() => {
+                if (!db) return;
+                const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
+                const unsubscribe = onSnapshot(editorsRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().list) {
+                        setCloudEditors(docSnap.data().list);
+                    } else {
+                        setCloudEditors([]);
+                    }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
                 if (!db || !user || !user.uid) return;
                 const registerUser = async () => {
                     try {
@@ -1109,6 +1153,8 @@
             }, [db, user]);
 
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
+            const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
+            const isUserPrivileged = isUserAdmin || isUserEditor;
 
             const handleSaveGeminiKey = (key) => {
                 alert("API Key 已內建，無需設定！");
@@ -1156,7 +1202,13 @@
                                 <div className="overflow-hidden">
                                     <div className="text-sm font-bold truncate w-32">{user.email}</div>
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                        {isUserAdmin ? <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span> : 'User'}
+                                        {isUserAdmin ? (
+                                            <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
+                                        ) : isUserEditor ? (
+                                            <span className="text-blue-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
+                                        ) : (
+                                            'User'
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1173,12 +1225,12 @@
                     </aside>
                     
                     <main className="flex-1 overflow-y-auto h-screen p-4 md:p-8 relative bg-slate-50/50">
-                        {activeTab === 'dashboard' && <Dashboard db={db} user={user} isAdmin={isUserAdmin} />}
-                        {activeTab === 'tasks' && <TaskManager db={db} user={user} isAdmin={isUserAdmin} />}
-                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} />}
+                        {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
+                        {activeTab === 'tasks' && <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
+                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} />}
                         {activeTab === 'settings' && (
                             isUserAdmin ? (
-                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} cloudAdmins={cloudAdmins} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} />
+                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                     <ShieldAlert size={48} className="mb-4" />
