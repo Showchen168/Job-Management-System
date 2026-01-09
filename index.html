@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3.4</title>
+    <title>工作紀錄中心 V2.3.5</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3.4"; // Updated: editor role access
+        const APP_VERSION = "V2.3.5"; // Updated: editor role access
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -481,7 +481,7 @@
         };
 
         const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
-            const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {} });
+            const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {}, byAssignee: {} });
             const [meetingStats, setMeetingStats] = useState({ total: 0, byCategory: {} });
 
             useEffect(() => {
@@ -490,13 +490,14 @@
                     ? query(collectionGroup(db, 'tasks')) 
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
                 const unsubTasks = onSnapshot(qTasks, (snapshot) => {
-                    let t = 0; let sources = {}; let statuses = {};
+                    let t = 0; let sources = {}; let statuses = {}; let assignees = {};
                     snapshot.forEach(doc => {
                         const data = doc.data(); t++;
                         const status = data.status || '未定義'; statuses[status] = (statuses[status] || 0) + 1;
                         const src = data.source || '未分類'; sources[src] = (sources[src] || 0) + 1;
+                        const owner = data.assignee || data.createdByEmail || '未指定'; assignees[owner] = (assignees[owner] || 0) + 1;
                     });
-                    setTaskStats({ total: t, byStatus: statuses, bySource: sources });
+                    setTaskStats({ total: t, byStatus: statuses, bySource: sources, byAssignee: assignees });
                 });
                 const qMeetings = canAccessAll
                     ? query(collectionGroup(db, 'meetings'))
@@ -522,10 +523,14 @@
                             return (<div key={status} className={`p-6 rounded-xl shadow-sm border ${colors[i % colors.length]}`}><div className="text-sm font-bold uppercase mb-2 opacity-80">{status}</div><div className="text-4xl font-bold">{count}</div></div>);
                         })}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart3 size={20}/> 待辦事項來源分析</h3>
                             <div className="space-y-3">{Object.keys(taskStats.bySource).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(taskStats.bySource).map(([src, count]) => (<div key={src}><div className="flex justify-between text-sm mb-1"><span className="text-slate-600">{src}</span><span className="font-bold text-slate-800">{count}</span></div><div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(count / taskStats.total) * 100}%` }}></div></div></div>))}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><User size={20}/> 負責人待辦統計</h3>
+                            <div className="space-y-2">{Object.keys(taskStats.byAssignee).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(taskStats.byAssignee).sort((a, b) => b[1] - a[1]).map(([name, count]) => (<div key={name} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100"><span className="text-slate-600 truncate">{name}</span><span className="font-mono font-bold text-slate-700">{count}</span></div>))}</div>
                         </div>
                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={20}/> 會議類型統計</h3>
