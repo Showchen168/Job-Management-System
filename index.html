@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 V2.3.2</title>
+    <title>工作紀錄中心 V2.3.3</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "V2.3.2"; // Updated: task AI prompt template
+        const APP_VERSION = "V2.3.3"; // Updated: user login registry tracking
         const GEMINI_API_KEY = "AIzaSyBrQVMs-71oxtvDKKMdRdzjGTrmZ2vxYJg";
 
         // --- 1. Firebase Configuration ---
@@ -1082,21 +1082,30 @@
             }, [db]);
 
             useEffect(() => {
-                if (db && user && user.email) {
-                    const registerUser = async () => {
-                        try {
-                            const userRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', user.uid);
-                            await setDoc(userRef, {
-                                uid: user.uid,
-                                email: user.email,
-                                lastSeen: serverTimestamp()
-                            }, { merge: true });
-                        } catch (e) {
-                            console.error("User Registry Error:", e);
+                if (!db || !user || !user.uid) return;
+                const registerUser = async () => {
+                    try {
+                        const userRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', user.uid);
+                        const snapshot = await getDoc(userRef);
+                        const existingData = snapshot.exists() ? snapshot.data() : {};
+                        const resolvedEmail = user.email || existingData.email;
+                        const payload = {
+                            uid: user.uid,
+                            lastSeen: serverTimestamp(),
+                            lastLoginAt: serverTimestamp()
+                        };
+                        if (resolvedEmail) {
+                            payload.email = resolvedEmail;
                         }
-                    };
-                    registerUser();
-                }
+                        if (!existingData.createdAt) {
+                            payload.createdAt = serverTimestamp();
+                        }
+                        await setDoc(userRef, payload, { merge: true });
+                    } catch (e) {
+                        console.error("User Registry Error:", e);
+                    }
+                };
+                registerUser();
             }, [db, user]);
 
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
