@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.3.8</title>
+    <title>工作紀錄中心 v2.3.9</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -99,7 +99,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.3.8"; // Updated: firebase connection status
+        const APP_VERSION = "v2.3.9"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -125,6 +125,12 @@
         const checkIsEditor = (user, cloudEditors = []) => {
             if (!user || !user.email) return false;
             return cloudEditors.includes(user.email);
+        };
+
+        const formatEmailPrefix = (email) => {
+            if (!email) return '使用者';
+            const [prefix] = email.split('@');
+            return prefix || email;
         };
 
         // --- Helper Functions ---
@@ -379,7 +385,7 @@
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.source || '-'}</td>
                 <td className="px-6 py-4">
                     <div className="font-medium text-slate-800 max-w-xs truncate" title={task.title}>{task.title}</div>
-                    {task.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {task.createdByEmail}</div>}
+                    {task.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {formatEmailPrefix(task.createdByEmail)}</div>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">{task.assignee || '-'}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{task.assignedDate}</td>
@@ -417,7 +423,7 @@
                 <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50" onClick={() => setExpanded(!expanded)}>
                     <div className="flex items-center gap-4 flex-1">
                     <div className="flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 w-16 h-16 rounded-lg border border-emerald-100 flex-shrink-0"><span className="text-xs font-bold uppercase">{new Date(meeting.date).toLocaleString('default', { month: 'short' })}</span><span className="text-xl font-bold">{new Date(meeting.date).getDate()}</span></div>
-                    <div><div className="flex items-center gap-2">{meeting.category && <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">{meeting.category}</span>}<h3 className="font-bold text-slate-800">{meeting.topic}</h3></div><p className="text-sm text-slate-500 flex gap-2 mt-1"><span>{meeting.host}</span><span>•</span><span className="line-clamp-1 max-w-[200px]">{meeting.attendees}</span></p>{meeting.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {meeting.createdByEmail}</div>}</div>
+                    <div><div className="flex items-center gap-2">{meeting.category && <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200">{meeting.category}</span>}<h3 className="font-bold text-slate-800">{meeting.topic}</h3></div><p className="text-sm text-slate-500 flex gap-2 mt-1"><span>{meeting.host}</span><span>•</span><span className="line-clamp-1 max-w-[200px]">{meeting.attendees}</span></p>{meeting.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {formatEmailPrefix(meeting.createdByEmail)}</div>}</div>
                     </div>
                     <div className="flex items-center gap-4"><ChevronRight size={20} className={`text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} /></div>
                 </div>
@@ -1101,7 +1107,7 @@
                 try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins'), { list: arrayUnion(newAdminEmail.trim()) }, { merge: true }); setNewAdminEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newAdminEmail} 新增為管理員`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
-            const confirmRemoveAdmin = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${emailToRemove} 的管理員權限？`, onConfirm: () => executeRemoveAdmin(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const confirmRemoveAdmin = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${formatEmailPrefix(emailToRemove)} 的管理員權限？`, onConfirm: () => executeRemoveAdmin(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
             const executeRemoveAdmin = async (emailToRemove) => {
                 setModalConfig({ isOpen: false });
                 const adminsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins');
@@ -1116,7 +1122,7 @@
                 try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors'), { list: arrayUnion(newEditorEmail.trim()) }, { merge: true }); setNewEditorEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newEditorEmail} 新增為編輯者`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
-            const confirmRemoveEditor = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${emailToRemove} 的編輯者權限？`, onConfirm: () => executeRemoveEditor(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const confirmRemoveEditor = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${formatEmailPrefix(emailToRemove)} 的編輯者權限？`, onConfirm: () => executeRemoveEditor(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
             const executeRemoveEditor = async (emailToRemove) => {
                 setModalConfig({ isOpen: false });
                 const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
@@ -1148,7 +1154,7 @@
                                                 : (u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000) : null);
                                             return (
                                                 <tr key={u.uid} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-3 font-medium text-slate-800">{u.email}</td>
+                                                    <td className="px-4 py-3 font-medium text-slate-800">{formatEmailPrefix(u.email)}</td>
                                                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
                                                     <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
                                                 </tr>
@@ -1165,7 +1171,7 @@
                         <div className="bg-yellow-50 p-8 rounded-xl shadow-sm border border-yellow-200">
                             <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-yellow-100 rounded-full"><UserCog className="text-yellow-700" size={24} /></div><div><h2 className="text-xl font-bold text-yellow-900">使用者權限管理</h2><p className="text-sm text-yellow-700">管理誰可以修改全域設定</p></div></div>
                             <div className="flex gap-2 mb-6"><input value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()} /><button onClick={handleAddAdmin} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm whitespace-nowrap">新增管理員</button></div>
-                            <div className="bg-white rounded-lg border border-yellow-200 overflow-hidden"><ul className="divide-y divide-yellow-100">{rootAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-bold text-slate-700"><ShieldCheck size={14} className="text-purple-600"/> {email}</span><span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">系統預設</span></li>))}{cloudAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-yellow-600"/> {email}</span><button onClick={() => confirmRemoveAdmin(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                            <div className="bg-white rounded-lg border border-yellow-200 overflow-hidden"><ul className="divide-y divide-yellow-100">{rootAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-bold text-slate-700"><ShieldCheck size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">系統預設</span></li>))}{cloudAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-yellow-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAdmin(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
                         </div>
                     )}
 
@@ -1174,7 +1180,7 @@
                         <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200">
                             <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料，但不可使用 AI 與系統設定</p></div></div>
                             <div className="flex gap-2 mb-6"><input value={newEditorEmail} onChange={(e) => setNewEditorEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddEditor()} /><button onClick={handleAddEditor} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap">新增編輯者</button></div>
-                            <div className="bg-white rounded-lg border border-blue-200 overflow-hidden"><ul className="divide-y divide-blue-100">{cloudEditors.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無編輯者</li>) : cloudEditors.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-blue-600"/> {email}</span><button onClick={() => confirmRemoveEditor(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                            <div className="bg-white rounded-lg border border-blue-200 overflow-hidden"><ul className="divide-y divide-blue-100">{cloudEditors.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無編輯者</li>) : cloudEditors.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-blue-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveEditor(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
                         </div>
                     )}
 
@@ -1347,6 +1353,7 @@
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
+            const userDisplayName = useMemo(() => formatEmailPrefix(user?.email), [user]);
             const connectionIndicatorClass = useMemo(() => {
                 if (connectionStatus.includes('已連線')) return 'bg-emerald-400';
                 if (connectionStatus.includes('離線')) return 'bg-red-400';
@@ -1372,7 +1379,7 @@
             }
 
             return (
-                <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col md:flex-row">
+                <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col md:flex-row" data-testid="app-shell">
                     <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
                         <div className="p-6 border-b border-slate-700">
                             <h1 className="text-xl font-bold flex items-center gap-2">
@@ -1399,10 +1406,10 @@
                         <div className="p-4 bg-slate-800 border-t border-slate-700">
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
-                                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                                    {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
                                 </div>
                                 <div className="overflow-hidden">
-                                    <div className="text-sm font-bold truncate w-32">{user.email}</div>
+                                    <div className="text-sm font-bold truncate w-32" data-testid="user-display-name">{userDisplayName}</div>
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                         {isUserAdmin ? (
                                             <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>

@@ -1,11 +1,8 @@
 {
   "name": "job-management-system",
-  "version": "v2.3.8",
+  "version": "v2.3.9",
   "private": true,
-  "devDependencies": {
-    "@playwright/test": "^1.43.1"
-  },
   "scripts": {
-    "test": "playwright test"
+    "test": "pytest tests/e2e"
   }
 }

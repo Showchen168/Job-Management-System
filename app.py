@@ -1,6 +1,6 @@
 import re
 
-APP_VERSION = "v2.3.8"
+APP_VERSION = "v2.3.9"
 
 
 def get_version():
