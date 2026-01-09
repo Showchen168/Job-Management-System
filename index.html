@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.3.9</title>
+    <title>工作紀錄中心 v2.4.1</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,6 +11,7 @@
 
     <!-- 2. 引入 React 和 Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js" crossorigin="anonymous" onerror="window.__openccLoadError = true;"></script>
     
     <!-- 設定 Tailwind -->
     <script>
@@ -67,6 +68,10 @@
 
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
+            if (message === 'Script error.' && window.__openccLoadError) {
+                console.warn('OpenCC script failed to load.', { source, lineno, colno });
+                return;
+            }
             const errorDiv = document.getElementById('global-error');
             errorDiv.style.display = 'block';
             errorDiv.innerHTML = `<strong>系統發生錯誤:</strong><br/>${message}`;
@@ -99,7 +104,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.3.9"; // Updated: firebase connection status
+        const APP_VERSION = "v2.4.1"; // Updated: firebase connection status
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
 
         // --- 1. Firebase Configuration ---
@@ -131,6 +136,45 @@
             if (!email) return '使用者';
             const [prefix] = email.split('@');
             return prefix || email;
+        };
+
+        const applyLanguageConversion = (language, rootElement, cache) => {
+            if (window.__openccLoadError || !window.OpenCC || !rootElement) return;
+            const toSimplified = language === 'zh-CN';
+            const converter = toSimplified
+                ? OpenCC.Converter({ from: 't', to: 's' })
+                : OpenCC.Converter({ from: 's', to: 't' });
+            const walker = document.createTreeWalker(
+                rootElement,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: (node) => {
+                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                        const parent = node.parentElement;
+                        if (!parent) return NodeFilter.FILTER_REJECT;
+                        const tag = parent.tagName;
+                        if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
+                        if (parent.isContentEditable) return NodeFilter.FILTER_REJECT;
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+            const nodes = [];
+            while (walker.nextNode()) {
+                nodes.push(walker.currentNode);
+            }
+            nodes.forEach((node) => {
+                if (toSimplified) {
+                    if (!cache.has(node)) {
+                        cache.set(node, node.nodeValue);
+                    }
+                    node.nodeValue = converter(node.nodeValue);
+                } else if (cache.has(node)) {
+                    node.nodeValue = cache.get(node);
+                } else {
+                    node.nodeValue = converter(node.nodeValue);
+                }
+            });
         };
 
         // --- Helper Functions ---
@@ -348,7 +392,7 @@
 
         // --- 3. Sub-Components (Tasks & Meetings) ---
 
-        const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses }) => {
+        const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses, assigneeOptions }) => {
             const [formData, setFormData] = useState({
                 title: '', assignee: '', status: 'Pending', source: '', assignedDate: new Date().toISOString().split('T')[0], dueDate: '', delayReason: '', progress: '', ...initialData
             });
@@ -358,7 +402,23 @@
                 <h3 className="font-bold text-lg mb-4 text-slate-700">{initialData ? '編輯事項' : '新增事項'}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">事項內容 <span className="text-red-500">*</span></label><input name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
-                    <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">負責人 <span className="text-red-500">*</span></label><input name="assignee" value={formData.assignee} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div className="col-span-2 md:col-span-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">負責人 <span className="text-red-500">*</span></label>
+                        <input
+                            name="assignee"
+                            value={formData.assignee}
+                            onChange={handleChange}
+                            className="w-full p-2 border rounded"
+                            list="assignee-options"
+                            data-testid="assignee-input"
+                            required
+                        />
+                        <datalist id="assignee-options">
+                            {(assigneeOptions || []).map((assignee) => (
+                                <option key={assignee} value={assignee} />
+                            ))}
+                        </datalist>
+                    </div>
                     <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">來源 <span className="text-red-500">*</span></label><select name="source" value={formData.source} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇來源</option>{taskSources.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">狀態 <span className="text-red-500">*</span></label><select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">交辦日期 <span className="text-red-500">*</span></label><input type="date" name="assignedDate" value={formData.assignedDate} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
@@ -439,9 +499,10 @@
 
         // --- 4. Page Components (AuthPage Defined Here) ---
         
-        const AuthPage = ({ auth, error, connectionStatus }) => {
+        const AuthPage = ({ auth, error, connectionStatus, language, onToggleLanguage }) => {
             const [isLogin, setIsLogin] = useState(true);
             const [email, setEmail] = useState('');
+            const [emailPrefix, setEmailPrefix] = useState('');
             const [password, setPassword] = useState('');
             const [authError, setAuthError] = useState('');
             const [loading, setLoading] = useState(false);
@@ -471,7 +532,19 @@
                     if (isLogin) {
                         await signInWithEmailAndPassword(auth, email, password);
                     } else {
-                        await createUserWithEmailAndPassword(auth, email, password);
+                        const normalizedPrefix = emailPrefix.trim();
+                        if (!normalizedPrefix) {
+                            setAuthError('請輸入 Email 前綴');
+                            setLoading(false);
+                            return;
+                        }
+                        if (normalizedPrefix.includes('@')) {
+                            setAuthError('請輸入 @ 之前的前綴');
+                            setLoading(false);
+                            return;
+                        }
+                        const registerEmail = `${normalizedPrefix}@aivres.com`;
+                        await createUserWithEmailAndPassword(auth, registerEmail, password);
                     }
                 } catch (err) {
                     console.error("Auth Error:", err);
@@ -543,6 +616,16 @@
                 <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
                 <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
                     <div className="bg-slate-900 p-8 text-center">
+                    <div className="flex justify-end mb-3">
+                        <button
+                            type="button"
+                            onClick={onToggleLanguage}
+                            className="text-xs text-slate-300 hover:text-white border border-slate-700 px-2 py-1 rounded"
+                            data-testid="language-toggle-auth"
+                        >
+                            {language === 'zh-TW' ? '切換為簡體' : '切換為繁體'}
+                        </button>
+                    </div>
                     <div className="inline-flex p-3 bg-blue-600 rounded-full mb-4 shadow-lg">
                         <Database size={32} className="text-white" />
                     </div>
@@ -554,11 +637,21 @@
                     {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
                     {!showForgot && (
                         <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
-                            <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
-                            {!isLogin && <p className="mt-2 text-xs text-slate-500">請用Aivres信箱註冊或登錄</p>}
-                        </div>
+                        {isLogin ? (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
+                                <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            </div>
+                        ) : (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Email 前綴</label>
+                                <div className="flex items-center gap-2">
+                                    <input type="text" required className="flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={emailPrefix} onChange={(e) => setEmailPrefix(e.target.value)} />
+                                    <span className="text-sm text-slate-500">@aivres.com</span>
+                                </div>
+                                <p className="mt-2 text-xs text-slate-500">註冊僅支援 @aivres.com 信箱，刪除帳號需使用 Aivres 信箱驗證。</p>
+                            </div>
+                        )}
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">密碼</label><input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
                         {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
                         <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}</button>
@@ -690,7 +783,7 @@
             );
         };
 
-        const TaskManager = ({ db, user, canAccessAll, isAdmin }) => {
+        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig }) => {
             const [tasks, setTasks] = useState([]);
             const [filteredTasks, setFilteredTasks] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -698,6 +791,7 @@
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [taskSources, setTaskSources] = useState(['Email', 'Meeting', 'Chat', 'Other']);
             const [taskStatuses, setTaskStatuses] = useState(['Pending', 'On-going', 'Done']);
+            const [assigneeOptions, setAssigneeOptions] = useState([]);
             const isRootAdmin = ROOT_ADMINS.includes(user?.email);
             const [aiLoading, setAiLoading] = useState(false);
             const [aiReport, setAiReport] = useState('');
@@ -725,6 +819,36 @@
                 });
                 return () => unsubscribe();
             }, [db]);
+
+            useEffect(() => {
+                if (testConfig?.enabled) {
+                    const params = new URLSearchParams(window.location.search);
+                    const rawAssignees = params.get('testAssignees') || '';
+                    const parsed = rawAssignees
+                        .split(',')
+                        .map((item) => item.trim())
+                        .filter(Boolean);
+                    const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                    setAssigneeOptions(uniqueAssignees);
+                    return;
+                }
+                if (!db) return;
+                const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
+                const q = query(usersRef, orderBy('lastSeen', 'desc'));
+                const unsubscribe = onSnapshot(
+                    q,
+                    (snapshot) => {
+                        const options = snapshot.docs
+                            .map((docSnap) => docSnap.data()?.email)
+                            .filter(Boolean)
+                            .map((email) => formatEmailPrefix(email));
+                        const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                        setAssigneeOptions(uniqueOptions);
+                    },
+                    (error) => console.error("Error assignees:", error)
+                );
+                return () => unsubscribe();
+            }, [db, testConfig?.enabled]);
 
             useEffect(() => {
                 let res = tasks;
@@ -851,7 +975,16 @@
                         <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
                     </div>
                 </div>
-                {isEditing && <TaskForm initialData={currentTask} taskSources={taskSources} taskStatuses={taskStatuses} onSave={handleSave} onCancel={() => setIsEditing(false)} />}
+                {isEditing && (
+                    <TaskForm
+                        initialData={currentTask}
+                        taskSources={taskSources}
+                        taskStatuses={taskStatuses}
+                        assigneeOptions={assigneeOptions}
+                        onSave={handleSave}
+                        onCancel={() => setIsEditing(false)}
+                    />
+                )}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-slate-600">
@@ -1036,6 +1169,10 @@
             const [allUsers, setAllUsers] = useState([]);
             const [isUserListLoading, setIsUserListLoading] = useState(false);
             const [userListError, setUserListError] = useState('');
+            const [notificationEnabled, setNotificationEnabled] = useState(false);
+            const [notificationTime, setNotificationTime] = useState('09:00');
+            const [notificationError, setNotificationError] = useState('');
+            const [isNotificationSaving, setIsNotificationSaving] = useState(false);
 
             useEffect(() => {
                 if (!db) return;
@@ -1078,6 +1215,30 @@
                         console.error('User list snapshot error:', error);
                         setUserListError(`讀取失敗：${error.message}`);
                         setIsUserListLoading(false);
+                    }
+                );
+                return () => unsubscribe();
+            }, [db, isAdmin]);
+
+            useEffect(() => {
+                if (!db || !isAdmin) return;
+                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
+                const unsubscribe = onSnapshot(
+                    notificationsRef,
+                    (docSnap) => {
+                        setNotificationError('');
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            setNotificationEnabled(Boolean(data.enabled));
+                            setNotificationTime(data.dailyTime || '09:00');
+                        } else {
+                            setNotificationEnabled(false);
+                            setNotificationTime('09:00');
+                        }
+                    },
+                    (error) => {
+                        console.error('Notification settings snapshot error:', error);
+                        setNotificationError(`讀取失敗：${error.message}`);
                     }
                 );
                 return () => unsubscribe();
@@ -1130,6 +1291,60 @@
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
 
+            const handleSaveNotificationSettings = async () => {
+                if (!db) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                setIsNotificationSaving(true);
+                try {
+                    await setDoc(
+                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
+                        {
+                            enabled: notificationEnabled,
+                            dailyTime: notificationTime,
+                            updatedAt: serverTimestamp(),
+                            updatedBy: user?.email || null
+                        },
+                        { merge: true }
+                    );
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                } finally {
+                    setIsNotificationSaving(false);
+                }
+            };
+
+            const confirmDeleteUser = (userToDelete) => {
+                setModalConfig({
+                    isOpen: true,
+                    type: 'danger',
+                    title: '確認刪除',
+                    content: `確定要刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料？`,
+                    onConfirm: () => executeDeleteUser(userToDelete),
+                    onCancel: () => setModalConfig({ isOpen: false })
+                });
+            };
+
+            const executeDeleteUser = async (userToDelete) => {
+                setModalConfig({ isOpen: false });
+                if (!userToDelete?.uid) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "無法取得使用者 UID", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                try {
+                    await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.uid));
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '完成', content: "已刪除使用者資料", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
+            };
+
             return (
                 <div className="max-w-3xl mx-auto space-y-8 pb-12">
                     <Modal {...modalConfig} />
@@ -1139,14 +1354,14 @@
                         <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
-                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th></tr></thead>
+                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">User UID</th><th className="px-4 py-3">最後上線</th><th className="px-4 py-3 text-right">操作</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {userListError ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
+                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
                                     ) : isUserListLoading ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
+                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
                                     ) : allUsers.length === 0 ? (
-                                        <tr><td colSpan="3" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
+                                        <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
                                     ) : (
                                         allUsers.map((u) => {
                                             const lastSeenDate = u.lastSeen?.toDate
@@ -1157,12 +1372,71 @@
                                                     <td className="px-4 py-3 font-medium text-slate-800">{formatEmailPrefix(u.email)}</td>
                                                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
                                                     <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => confirmDeleteUser(u)}
+                                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })
                                     )}
                                 </tbody>
                             </table>
+                            <p className="mt-3 text-xs text-slate-400">刪除註冊資料需使用 Aivres 信箱驗證，建議先確認該帳號用途。</p>
+                        </div>
+                    </div>
+
+                    {/* Notification Settings */}
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="notification-settings">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className={`p-3 rounded-full ${isAdmin ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                                {isAdmin ? <Clock className="text-amber-700" size={24} /> : <Lock className="text-slate-500" size={24} />}
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800">郵件通知設定</h2>
+                                <p className="text-sm text-slate-500">每天固定時間寄送 On-going 待辦事項提醒</p>
+                            </div>
+                        </div>
+                        {notificationError && (
+                            <div className="mb-4 text-sm text-red-600">{notificationError}</div>
+                        )}
+                        <div className="flex flex-col gap-4">
+                            <label className="flex items-center gap-3 text-sm text-slate-700">
+                                <input
+                                    type="checkbox"
+                                    checked={notificationEnabled}
+                                    onChange={(e) => setNotificationEnabled(e.target.checked)}
+                                    className="h-4 w-4"
+                                    data-testid="notification-enabled"
+                                />
+                                啟用每日提醒
+                            </label>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">通知時間</label>
+                                <input
+                                    type="time"
+                                    value={notificationTime}
+                                    onChange={(e) => setNotificationTime(e.target.value)}
+                                    className="w-full p-2 border rounded"
+                                    data-testid="notification-time-input"
+                                />
+                                <p className="mt-2 text-xs text-slate-400">郵件通知由排程服務觸發，請確保後端排程每日執行。</p>
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleSaveNotificationSettings}
+                                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={!db || isNotificationSaving}
+                                    data-testid="notification-save-button"
+                                >
+                                    {isNotificationSaving ? '儲存中...' : '儲存設定'}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1221,6 +1495,8 @@
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
+            const [language, setLanguage] = useState('zh-TW');
+            const languageCacheRef = useRef(new Map());
 
             const testConfig = useMemo(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -1350,6 +1626,12 @@
                 registerUser();
             }, [db, user, testConfig.enabled]);
 
+            useEffect(() => {
+                const rootElement = document.getElementById('root');
+                if (!rootElement) return;
+                applyLanguageConversion(language, rootElement, languageCacheRef.current);
+            }, [language]);
+
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
@@ -1365,6 +1647,10 @@
                 alert("API Key 已內建，無需設定！");
             };
 
+            const toggleLanguage = () => {
+                setLanguage((prev) => (prev === 'zh-TW' ? 'zh-CN' : 'zh-TW'));
+            };
+
             if (isAuthChecking) {
                 return (
                     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-slate-500">
@@ -1375,7 +1661,15 @@
             }
 
             if (!user) {
-                return <AuthPage auth={auth} error={error} connectionStatus={connectionStatus} />;
+                return (
+                    <AuthPage
+                        auth={auth}
+                        error={error}
+                        connectionStatus={connectionStatus}
+                        language={language}
+                        onToggleLanguage={toggleLanguage}
+                    />
+                );
             }
 
             return (
@@ -1404,6 +1698,14 @@
                             )}
                         </nav>
                         <div className="p-4 bg-slate-800 border-t border-slate-700">
+                            <button
+                                type="button"
+                                onClick={toggleLanguage}
+                                className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3"
+                                data-testid="language-toggle"
+                            >
+                                {language === 'zh-TW' ? '切換為簡體' : '切換為繁體'}
+                            </button>
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
                                     {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
@@ -1437,7 +1739,15 @@
                     
                     <main className="flex-1 overflow-y-auto h-screen p-4 md:p-8 relative bg-slate-50/50">
                         {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
-                        {activeTab === 'tasks' && <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
+                        {activeTab === 'tasks' && (
+                            <TaskManager
+                                db={db}
+                                user={user}
+                                canAccessAll={isUserPrivileged}
+                                isAdmin={isUserAdmin}
+                                testConfig={testConfig}
+                            />
+                        )}
                         {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} />}
                         {activeTab === 'settings' && (
                             isUserAdmin ? (
