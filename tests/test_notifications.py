@@ -56,7 +56,8 @@ def test_should_send_notification_respects_daily_schedule():
 
 
 def test_trigger_daily_notifications_returns_payloads_when_enabled():
-    settings = NotificationSettings(daily_time="09:00", enabled=True)
+    # Fixed: Use dailyTime instead of daily_time
+    settings = NotificationSettings(dailyTime="09:00", enabled=True)
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
@@ -69,7 +70,8 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
 
 
 def test_trigger_daily_notifications_skips_when_disabled():
-    settings = NotificationSettings(daily_time="09:00", enabled=False)
+    # Fixed: Use dailyTime instead of daily_time
+    settings = NotificationSettings(dailyTime="09:00", enabled=False)
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
