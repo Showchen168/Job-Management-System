@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.5.1</title>
+    <title>工作紀錄中心 v2.5.2</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -83,7 +83,7 @@
         
         import { initializeApp, getApps, getApp, deleteApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { 
-            getFirestore, collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove 
+            getFirestore, collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove 
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { 
             getAuth,
@@ -102,7 +102,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.5.1"; // Updated: firebase connection status
+        const APP_VERSION = "v2.5.2"; // Updated: firebase connection status
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -200,8 +200,43 @@
             return null;
         };
 
+        const formatLocalDate = (value = new Date()) => {
+            const date = value instanceof Date ? value : new Date(value);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const parseNotificationTime = (value) => {
+            const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(value);
+            if (!match) return null;
+            const [hour, minute] = value.split(':').map(Number);
+            return { hour, minute };
+        };
+
+        const normalizeLastSentDate = (value) => {
+            if (!value) return null;
+            if (typeof value === 'string') return value;
+            if (value.toDate) return formatLocalDate(value.toDate());
+            if (value.seconds) return formatLocalDate(new Date(value.seconds * 1000));
+            return null;
+        };
+
+        const shouldSendDailyNotification = (settings, now = new Date()) => {
+            if (!settings?.enabled) return false;
+            const parsedTime = parseNotificationTime(settings.dailyTime || '');
+            if (!parsedTime) return false;
+            const target = new Date(now);
+            target.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+            if (now < target) return false;
+            const lastSentDate = normalizeLastSentDate(settings.lastSentDate || settings.lastSentAt);
+            if (lastSentDate && lastSentDate === formatLocalDate(now)) return false;
+            return true;
+        };
+
         const buildNotificationPayloads = (tasks, userEmails, notifyDate = new Date()) => {
-            const displayDate = notifyDate.toISOString().split('T')[0];
+            const displayDate = formatLocalDate(notifyDate);
             const notifications = {};
             tasks.forEach((task) => {
                 if (!isOnGoingStatus(task.status)) return;
@@ -1526,7 +1561,7 @@
                     return;
                 }
                 const notifyDate = new Date();
-                const displayDate = notifyDate.toISOString().split('T')[0];
+                const displayDate = formatLocalDate(notifyDate);
                 const sampleTasks = [
                     { title: '更新里程碑', status: 'On-going', assignee: recipient, dueDate: displayDate },
                     { title: '彙整需求', status: '進行中', assignee: recipient, dueDate: displayDate }
@@ -1818,6 +1853,7 @@
             const localeConvertersRef = useRef(null);
             const originalLocaleTextRef = useRef(new WeakMap());
             const isLocaleUpdatingRef = useRef(false);
+            const notificationSendingRef = useRef(false);
 
             const testConfig = useMemo(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -1980,6 +2016,63 @@
                 if (connectionStatus.includes('測試模式')) return 'bg-amber-400';
                 return 'bg-slate-400';
             }, [connectionStatus]);
+
+            useEffect(() => {
+                if (!db || !user || !isUserAdmin || testConfig.enabled) return;
+                let isCancelled = false;
+                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
+                const emailServiceRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'emailService');
+                const runNotificationCheck = async () => {
+                    if (notificationSendingRef.current || isCancelled) return;
+                    notificationSendingRef.current = true;
+                    try {
+                        const now = new Date();
+                        const notificationSnap = await getDoc(notificationsRef);
+                        const settings = notificationSnap.exists() ? notificationSnap.data() : {};
+                        if (!shouldSendDailyNotification(settings, now)) return;
+                        const emailServiceSnap = await getDoc(emailServiceRef);
+                        if (!emailServiceSnap.exists()) {
+                            console.warn('Email service 設定尚未完成，跳過每日提醒。');
+                            return;
+                        }
+                        const emailConfig = emailServiceSnap.data();
+                        if (!emailConfig.serviceId || !emailConfig.templateId || !emailConfig.publicKey) {
+                            console.warn('Email service 設定不完整，跳過每日提醒。');
+                            return;
+                        }
+                        const taskSnapshot = await getDocs(query(collectionGroup(db, 'tasks')));
+                        const tasks = taskSnapshot.docs.map((docSnap) => docSnap.data());
+                        const usersSnapshot = await getDocs(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'));
+                        const userEmails = usersSnapshot.docs
+                            .map((docSnap) => docSnap.data()?.email)
+                            .filter(Boolean);
+                        const payloads = buildNotificationPayloads(tasks, userEmails, now);
+                        if (!payloads.length) return;
+                        for (const payload of payloads) {
+                            await sendEmailJsNotification(emailConfig, payload);
+                        }
+                        await setDoc(
+                            notificationsRef,
+                            {
+                                lastSentDate: formatLocalDate(now),
+                                lastSentAt: serverTimestamp(),
+                                lastSentCount: payloads.length
+                            },
+                            { merge: true }
+                        );
+                    } catch (error) {
+                        console.error('Daily notification error:', error);
+                    } finally {
+                        notificationSendingRef.current = false;
+                    }
+                };
+                runNotificationCheck();
+                const intervalId = setInterval(runNotificationCheck, 60000);
+                return () => {
+                    isCancelled = true;
+                    clearInterval(intervalId);
+                };
+            }, [db, user, isUserAdmin, testConfig.enabled]);
 
             const handleSaveGeminiKey = (key) => {
                 alert("API Key 已內建，無需設定！");
