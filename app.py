@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.5.0"
+APP_VERSION = "v2.5.1"
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 
 

@@ -27,15 +27,19 @@ test('負責人欄位顯示已註冊使用者下拉選單', async ({ page }) => 
   await expect(page.locator('datalist#assignee-options option')).toHaveCount(2);
 });
 
-test('可發送測試通知預覽內容', async ({ page }) => {
+test('測試通知需先完成 EmailJS 設定', async ({ page }) => {
   await page.goto('/index.html?testMode=1&testUserEmail=showchen@aivres.com');
 
   await page.getByRole('button', { name: '系統設定' }).click();
+
+  await expect(page.getByTestId('emailjs-service-id')).toBeVisible();
+  await expect(page.getByTestId('emailjs-template-id')).toBeVisible();
+  await expect(page.getByTestId('emailjs-public-key')).toBeVisible();
 
   await page.getByTestId('notification-test-email').fill('alice@example.com');
   await page.getByTestId('notification-test-button').click();
 
   const modal = page.getByTestId('notification-test-modal');
   await expect(modal).toBeVisible();
-  await expect(modal).toContainText('待辦更新提醒');
+  await expect(modal).toContainText('請先完成 EmailJS 服務設定');
 });
