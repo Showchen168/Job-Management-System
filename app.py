@@ -5,7 +5,7 @@ import os
 import json
 import sys
 
-APP_VERSION = "v2.5.5"  # Updated version
+APP_VERSION = "v2.5.6"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 DEFAULT_DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_LOOKUP = {key: index for index, key in enumerate(DEFAULT_DAYS_OF_WEEK)}
@@ -24,7 +24,7 @@ def get_version():
 
 
 def validate_version(version):
-    if not re.fullmatch(r"v\d+\.\d+\.[0-9]+", version): # Slightly improved regex for patch versions
+    if not re.fullmatch(r"v\d+\.\d+\.[0-9]", version):
         raise ValueError("版本格式不正確")
     return True
 
@@ -143,7 +143,7 @@ def format_notification_email(assignee_email, tasks, notify_date):
     return subject, "\n".join(lines)
 
 
-def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=None):
+def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=None, allow_repeat=False):
     # Note: Keep argument name as daily_time for internal logic, 
     # but the value will come from settings.dailyTime
     if not is_scheduled_day(now, days_of_week):
@@ -154,9 +154,10 @@ def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=
         target = target.replace(tzinfo=now.tzinfo)
     if now < target:
         return False
-    #normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
-    #if normalized_last_sent_date and normalized_last_sent_date == now.date():
-    #    return False
+    if not allow_repeat:
+        normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
+        if normalized_last_sent_date and normalized_last_sent_date == now.date():
+            return False
     return True
 
 
@@ -170,12 +171,18 @@ def prepare_notification_payloads(tasks, user_emails, notify_date=None):
     return payloads
 
 
-def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sent_date=None):
+def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sent_date=None, allow_repeat=False):
     if not settings or not settings.enabled:
         return []
     now = now or datetime.now()
     # Fixed: Access .dailyTime instead of .daily_time
-    if not should_send_notification(now, settings.dailyTime, last_sent_date, settings.daysOfWeek):
+    if not should_send_notification(
+        now,
+        settings.dailyTime,
+        last_sent_date,
+        settings.daysOfWeek,
+        allow_repeat=allow_repeat,
+    ):
         return []
     return prepare_notification_payloads(tasks, user_emails, notify_date=now.date())
 

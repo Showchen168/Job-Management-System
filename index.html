@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.5.5</title>
+    <title>工作紀錄中心 v2.5.6</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,7 +102,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.5.5"; // Updated: notification weekdays
+        const APP_VERSION = "v2.5.6"; // Updated: notification weekdays
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const WEEKDAY_OPTIONS = [
             { key: "mon", label: "週一" },
@@ -1366,6 +1366,7 @@
             const [emailServiceError, setEmailServiceError] = useState('');
             const [isEmailServiceSaving, setIsEmailServiceSaving] = useState(false);
             const [isTestNotificationSending, setIsTestNotificationSending] = useState(false);
+            const [isManualNotificationSending, setIsManualNotificationSending] = useState(false);
             const isTestMode = Boolean(testConfig?.enabled);
             const userTableColSpan = isAdmin ? 4 : 3;
 
@@ -1642,6 +1643,16 @@
                 }
             };
 
+            const fetchOnGoingNotificationPayloads = async (notifyDate) => {
+                const taskSnapshot = await getDocs(query(collectionGroup(db, 'tasks')));
+                const tasks = taskSnapshot.docs.map((docSnap) => docSnap.data());
+                const usersSnapshot = await getDocs(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'));
+                const userEmails = usersSnapshot.docs
+                    .map((docSnap) => docSnap.data()?.email)
+                    .filter(Boolean);
+                return buildNotificationPayloads(tasks, userEmails, notifyDate);
+            };
+
             const handleTestNotification = () => {
                 const recipient = testRecipientEmail.trim();
                 if (!recipient || !recipient.includes('@')) {
@@ -1693,6 +1704,86 @@
                         });
                     })
                     .finally(() => setIsTestNotificationSending(false));
+            };
+
+            const handleManualOnGoingNotification = async () => {
+                if (!db) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法發送通知", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                if (!emailServiceConfig.serviceId.trim() || !emailServiceConfig.templateId.trim() || !emailServiceConfig.publicKey.trim()) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請先完成 EmailJS 服務設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                setIsManualNotificationSending(true);
+                try {
+                    const notifyDate = new Date();
+                    const payloads = await fetchOnGoingNotificationPayloads(notifyDate);
+                    if (!payloads.length) {
+                        setModalConfig({
+                            isOpen: true,
+                            type: 'danger',
+                            title: '無通知可發送',
+                            content: '目前沒有 On-going 待辦事項或負責人資料。',
+                            onConfirm: () => setModalConfig({ isOpen: false }),
+                            confirmText: '關閉',
+                            onCancel: null
+                        });
+                        return;
+                    }
+                    const recipients = [...new Set(payloads.map((payload) => payload.to))];
+                    const preview = `通知數量：${payloads.length}\n收件人：${recipients.join('、')}`;
+                    setModalConfig({
+                        isOpen: true,
+                        type: 'confirm',
+                        title: '確認發送 On-going 通知',
+                        content: `將會發送目前 On-going 待辦的通知（不受每日限制）。\n${preview}`,
+                        onConfirm: async () => {
+                            setModalConfig({ isOpen: false });
+                            setIsManualNotificationSending(true);
+                            try {
+                                for (const payload of payloads) {
+                                    await sendEmailJsNotification(emailServiceConfig, payload);
+                                }
+                                setModalConfig({
+                                    isOpen: true,
+                                    type: 'confirm',
+                                    title: '通知發送完成',
+                                    content: preview,
+                                    onConfirm: () => setModalConfig({ isOpen: false }),
+                                    confirmText: '關閉',
+                                    onCancel: null
+                                });
+                            } catch (error) {
+                                setModalConfig({
+                                    isOpen: true,
+                                    type: 'danger',
+                                    title: '發送失敗',
+                                    content: `EmailJS 發送失敗：${error.message}`,
+                                    onConfirm: () => setModalConfig({ isOpen: false }),
+                                    confirmText: '關閉',
+                                    onCancel: null
+                                });
+                            } finally {
+                                setIsManualNotificationSending(false);
+                            }
+                        },
+                        confirmText: '確認發送',
+                        onCancel: () => setModalConfig({ isOpen: false })
+                    });
+                } catch (error) {
+                    setModalConfig({
+                        isOpen: true,
+                        type: 'danger',
+                        title: '發送失敗',
+                        content: `通知準備失敗：${error.message}`,
+                        onConfirm: () => setModalConfig({ isOpen: false }),
+                        confirmText: '關閉',
+                        onCancel: null
+                    });
+                } finally {
+                    setIsManualNotificationSending(false);
+                }
             };
 
             return (
@@ -1900,6 +1991,22 @@
                                     </button>
                                 </div>
                                 <p className="mt-2 text-xs text-slate-400">測試通知會實際寄送至指定信箱，不會影響正式排程{isTestMode ? '（目前為測試模式）' : ''}。</p>
+                            </div>
+                            <div className="pt-4 border-t border-slate-100" data-testid="notification-manual-trigger">
+                                <h3 className="text-sm font-bold text-slate-700 mb-2">發送 On-going 通知（測試）</h3>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    依目前 On-going 待辦與負責人資料寄送通知，不受每日限制，且不會更新每日寄送紀錄。
+                                </p>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={handleManualOnGoingNotification}
+                                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={isManualNotificationSending}
+                                        data-testid="notification-manual-trigger-button"
+                                    >
+                                        {isManualNotificationSending ? '發送中...' : '立即發送 On-going 通知'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

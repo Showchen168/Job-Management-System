@@ -20,3 +20,8 @@ def test_validate_version_accepts_current_version():
 def test_validate_version_rejects_invalid_format():
     with pytest.raises(ValueError):
         validate_version("v2.3")
+
+
+def test_validate_version_rejects_patch_over_9():
+    with pytest.raises(ValueError):
+        validate_version("v2.5.10")
