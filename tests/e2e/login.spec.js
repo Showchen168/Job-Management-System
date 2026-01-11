@@ -17,7 +17,10 @@ test('登入頁面顯示並產生截圖', async ({ page }) => {
 });
 
 test('測試模式登入成功畫面並產生截圖', async ({ page }) => {
-  await page.goto('/index.html?testMode=1&testUserEmail=showchen@aivres.com');
+  const testUserEmail = process.env.TEST_USER_EMAIL;
+  test.skip(!testUserEmail, '需要設定 TEST_USER_EMAIL 以執行登入成功測試');
+
+  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testUserEmail)}`);
 
   await expect(page.getByTestId('app-shell')).toBeVisible();
 

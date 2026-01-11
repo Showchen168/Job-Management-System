@@ -41,20 +41,24 @@ def test_build_on_going_notifications_groups_by_assignee():
         {"title": "資料同步", "status": "Done", "assignee": "alice"},
         {"title": "前端優化", "status": "進行中", "assignee": "bob"},
     ]
-    user_emails = ["alice@example.com", "bob@example.com"]
+    user_emails = ["alice@aivres.com", "bob@aivres.com"]
     notifications = build_on_going_notifications(tasks, user_emails)
-    assert list(notifications.keys()) == ["alice@example.com", "bob@example.com"]
-    assert [task["title"] for task in notifications["alice@example.com"]] == ["修正報表"]
+    assert list(notifications.keys()) == ["alice@aivre.com", "bob@aivre.com"]
+    assert [task["title"] for task in notifications["alice@aivre.com"]] == ["修正報表"]
 
 
 def test_resolve_assignee_email_prefers_explicit_email():
-    assert resolve_assignee_email("bob@example.com", ["bob@example.com"]) == "bob@example.com"
+    assert resolve_assignee_email("bob@example.com", ["bob@aivres.com"]) == "bob@aivre.com"
+
+
+def test_resolve_assignee_email_returns_none_when_not_registered():
+    assert resolve_assignee_email("carol", ["bob@aivres.com"]) is None
 
 
 def test_prepare_notification_payloads_formats_subject_and_body():
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice", "dueDate": "2024-12-31"}]
-    payloads = prepare_notification_payloads(tasks, ["alice@example.com"], notify_date=date(2024, 1, 1))
-    assert payloads[0]["to"] == "alice@example.com"
+    payloads = prepare_notification_payloads(tasks, ["alice@aivres.com"], notify_date=date(2024, 1, 1))
+    assert payloads[0]["to"] == "alice@aivre.com"
     assert "2024-01-01" in payloads[0]["subject"]
     assert "狀態更新" in payloads[0]["body"]
 
@@ -85,17 +89,16 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
         dailyTime="09:00",
         enabled=True,
         daysOfWeek=("mon",),
-        timeZone="Asia/Taipei",
     )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
         tasks,
-        ["alice@example.com"],
+        ["alice@aivres.com"],
         now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
     )
     assert payloads
-    assert payloads[0]["to"] == "alice@example.com"
+    assert payloads[0]["to"] == "alice@aivre.com"
 
 
 def test_trigger_daily_notifications_skips_when_disabled():
@@ -104,13 +107,12 @@ def test_trigger_daily_notifications_skips_when_disabled():
         dailyTime="09:00",
         enabled=False,
         daysOfWeek=("mon",),
-        timeZone="Asia/Taipei",
     )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
         tasks,
-        ["alice@example.com"],
+        ["alice@aivres.com"],
         now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
     )
     assert payloads == []
