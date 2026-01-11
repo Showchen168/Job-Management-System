@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.5.4</title>
+    <title>工作紀錄中心 v2.5.5</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,7 +102,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.5.4"; // Updated: notification weekdays
+        const APP_VERSION = "v2.5.5"; // Updated: notification weekdays
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const WEEKDAY_OPTIONS = [
             { key: "mon", label: "週一" },
@@ -118,6 +118,7 @@
         const DEFAULT_LOCALE = "zh-Hant";
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
         const AIVRES_EMAIL_DOMAIN = "@aivres.com";
+        const NOTIFICATION_EMAIL_DOMAIN = "@aivre.com";
 
         // --- 1. Firebase Configuration ---
         const DEFAULT_CONFIG = {
@@ -199,15 +200,27 @@
             return ON_GOING_KEYWORDS.some((keyword) => normalized.includes(keyword));
         };
 
-        const resolveAssigneeEmail = (assignee, userEmails = []) => {
-            if (!assignee) return null;
-            if (assignee.includes('@')) return assignee;
-            const trimmed = assignee.trim();
-            for (const email of userEmails) {
-                const [prefix] = email.split('@');
-                if (prefix === trimmed) return email;
+        const extractEmailPrefix = (value) => {
+            if (!value) return null;
+            const normalized = String(value).trim();
+            if (!normalized) return null;
+            if (normalized.includes('@')) {
+                const [prefix] = normalized.split('@');
+                return prefix || null;
             }
-            return null;
+            return normalized;
+        };
+
+        const resolveAssigneeEmail = (assignee, userEmails = []) => {
+            const assigneePrefix = extractEmailPrefix(assignee);
+            if (!assigneePrefix) return null;
+            const registeredPrefixes = new Set(
+                userEmails
+                    .filter(Boolean)
+                    .map((email) => email.split('@')[0])
+            );
+            if (!registeredPrefixes.has(assigneePrefix)) return null;
+            return `${assigneePrefix}${NOTIFICATION_EMAIL_DOMAIN}`;
         };
 
         const formatLocalDate = (value = new Date()) => {
@@ -1687,13 +1700,13 @@
                     <Modal {...modalConfig} />
                     
                     {/* User Registry List */}
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="registered-users">
                         <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
                                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                                     <tr>
-                                        <th className="px-4 py-3">Email</th>
+                                        <th className="px-4 py-3">使用者</th>
                                         <th className="px-4 py-3">User UID</th>
                                         <th className="px-4 py-3">最後上線</th>
                                         {isAdmin && <th className="px-4 py-3 text-right">操作</th>}

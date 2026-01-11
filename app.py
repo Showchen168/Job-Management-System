@@ -2,10 +2,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.5.4"  # Updated version
+APP_VERSION = "v2.5.5"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 DEFAULT_DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_LOOKUP = {key: index for index, key in enumerate(DEFAULT_DAYS_OF_WEEK)}
+NOTIFICATION_EMAIL_DOMAIN = "@aivre.com"
 
 
 @dataclass(frozen=True)
@@ -88,16 +89,26 @@ def is_on_going(status):
     return any(keyword in normalized for keyword in ON_GOING_KEYWORDS)
 
 
-def resolve_assignee_email(assignee, user_emails):
-    if not assignee:
+def extract_email_prefix(value):
+    if not value:
         return None
-    if "@" in assignee:
-        return assignee
-    assignee_prefix = assignee.strip()
-    for email in user_emails:
-        prefix = email.split("@", 1)[0]
-        if prefix == assignee_prefix:
-            return email
+    if "@" in value:
+        prefix = value.split("@", 1)[0]
+    else:
+        prefix = value
+    prefix = prefix.strip()
+    return prefix or None
+
+
+def resolve_assignee_email(assignee, user_emails):
+    assignee_prefix = extract_email_prefix(assignee)
+    if not assignee_prefix:
+        return None
+    registered_prefixes = {
+        email.split("@", 1)[0] for email in user_emails if email
+    }
+    if assignee_prefix in registered_prefixes:
+        return f"{assignee_prefix}{NOTIFICATION_EMAIL_DOMAIN}"
     return None
 
 
@@ -136,6 +147,8 @@ def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=
         return False
     scheduled_time = parse_notification_time(daily_time)
     target = datetime.combine(now.date(), scheduled_time)
+    if now.tzinfo and target.tzinfo is None:
+        target = target.replace(tzinfo=now.tzinfo)
     if now < target:
         return False
     normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
