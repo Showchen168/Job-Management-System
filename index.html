@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.5.8</title>
+    <title>工作紀錄中心 v2.5.9</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,18 +102,8 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.5.8"; // Updated: notification weekdays
+        const APP_VERSION = "v2.5.9"; // Updated: notification weekdays
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
-        const WEEKDAY_OPTIONS = [
-            { key: "mon", label: "週一" },
-            { key: "tue", label: "週二" },
-            { key: "wed", label: "週三" },
-            { key: "thu", label: "週四" },
-            { key: "fri", label: "週五" },
-            { key: "sat", label: "週六" },
-            { key: "sun", label: "週日" }
-        ];
-        const WEEKDAY_KEYS_BY_INDEX = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
@@ -231,57 +221,6 @@
             return `${year}-${month}-${day}`;
         };
 
-        const parseNotificationTime = (value) => {
-            const match = /^(?:[01]\d|2[0-3]):[0-5]\d$/.exec(value);
-            if (!match) return null;
-            const [hour, minute] = value.split(':').map(Number);
-            return { hour, minute };
-        };
-
-        const normalizeWeekdays = (value) => {
-            if (value === null || value === undefined) {
-                return WEEKDAY_OPTIONS.map((option) => option.key);
-            }
-            if (!Array.isArray(value) || value.length === 0) {
-                return [];
-            }
-            const allowed = new Set(WEEKDAY_OPTIONS.map((option) => option.key));
-            const unique = new Set(
-                value
-                    .map((item) => String(item).trim().toLowerCase())
-                    .filter((item) => allowed.has(item))
-            );
-            return WEEKDAY_OPTIONS.map((option) => option.key).filter((key) => unique.has(key));
-        };
-
-        const isScheduledWeekday = (daysOfWeek, now = new Date()) => {
-            if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0) return false;
-            const key = WEEKDAY_KEYS_BY_INDEX[now.getDay()];
-            return daysOfWeek.includes(key);
-        };
-
-        const normalizeLastSentDate = (value) => {
-            if (!value) return null;
-            if (typeof value === 'string') return value;
-            if (value.toDate) return formatLocalDate(value.toDate());
-            if (value.seconds) return formatLocalDate(new Date(value.seconds * 1000));
-            return null;
-        };
-
-        const shouldSendDailyNotification = (settings, now = new Date()) => {
-            if (!settings?.enabled) return false;
-            const parsedTime = parseNotificationTime(settings.dailyTime || '');
-            if (!parsedTime) return false;
-            const normalizedDays = normalizeWeekdays(settings.daysOfWeek);
-            if (!isScheduledWeekday(normalizedDays, now)) return false;
-            const target = new Date(now);
-            target.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
-            if (now < target) return false;
-            const lastSentDate = normalizeLastSentDate(settings.lastSentDate || settings.lastSentAt);
-            if (lastSentDate && lastSentDate === formatLocalDate(now)) return false;
-            return true;
-        };
-
         const buildNotificationPayloads = (tasks, userEmails, notifyDate = new Date()) => {
             const displayDate = formatLocalDate(notifyDate);
             const notifications = {};
@@ -303,7 +242,7 @@
                     const dueDate = task.dueDate || "未設定";
                     lines.push(`- ${title}（預計完成：${dueDate}）`);
                 });
-                lines.push("", "此郵件為系統每日提醒通知，如有更新請至系統填寫。");
+                lines.push("", "此郵件為系統 On-going 通知，如有更新請至系統填寫。");
                 return { to: email, subject, body: lines.join("\n") };
             });
         };
@@ -1350,10 +1289,6 @@
             const [allUsers, setAllUsers] = useState([]);
             const [isUserListLoading, setIsUserListLoading] = useState(false);
             const [userListError, setUserListError] = useState('');
-            const [notificationTime, setNotificationTime] = useState('09:00');
-            const [notificationDays, setNotificationDays] = useState(WEEKDAY_OPTIONS.map((option) => option.key));
-            const [notificationError, setNotificationError] = useState('');
-            const [isNotificationSaving, setIsNotificationSaving] = useState(false);
             const [emailServiceConfig, setEmailServiceConfig] = useState({
                 provider: 'emailjs',
                 serviceId: '',
@@ -1408,30 +1343,6 @@
                         console.error('User list snapshot error:', error);
                         setUserListError(`讀取失敗：${error.message}`);
                         setIsUserListLoading(false);
-                    }
-                );
-                return () => unsubscribe();
-            }, [db, isAdmin]);
-
-            useEffect(() => {
-                if (!db || !isAdmin) return;
-                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
-                const unsubscribe = onSnapshot(
-                    notificationsRef,
-                    (docSnap) => {
-                        setNotificationError('');
-                        if (docSnap.exists()) {
-                            const data = docSnap.data();
-                            setNotificationTime(data.dailyTime || '09:00');
-                            setNotificationDays(normalizeWeekdays(data.daysOfWeek));
-                        } else {
-                            setNotificationTime('09:00');
-                            setNotificationDays(WEEKDAY_OPTIONS.map((option) => option.key));
-                        }
-                    },
-                    (error) => {
-                        console.error('Notification settings snapshot error:', error);
-                        setNotificationError(`讀取失敗：${error.message}`);
                     }
                 );
                 return () => unsubscribe();
@@ -1546,52 +1457,6 @@
                 const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
                 try { const snapshot = await getDoc(editorsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(editorsRef, { list: updatedList }, { merge: true }); } }
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
-            };
-
-            const handleToggleNotificationDay = (key) => {
-                setNotificationDays((prev) => {
-                    const set = new Set(prev);
-                    if (set.has(key)) {
-                        set.delete(key);
-                    } else {
-                        set.add(key);
-                    }
-                    return WEEKDAY_OPTIONS.map((option) => option.key).filter((dayKey) => set.has(dayKey));
-                });
-            };
-
-            const handleSaveNotificationSettings = async () => {
-                if (!db) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "目前無法儲存設定", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(notificationTime)) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "通知時間格式不正確", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                if (notificationDays.length === 0) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請至少選擇一天通知星期", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                setIsNotificationSaving(true);
-                try {
-                    await setDoc(
-                        doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications'),
-                        {
-                            dailyTime: notificationTime,
-                            daysOfWeek: notificationDays,
-                            triggerSource: 'server',
-                            updatedAt: serverTimestamp(),
-                            updatedBy: user?.email || null
-                        },
-                        { merge: true }
-                    );
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: "郵件通知設定已更新", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-                } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                } finally {
-                    setIsNotificationSaving(false);
-                }
             };
 
             const handleEmailServiceChange = (field, value) => {
@@ -1787,55 +1652,13 @@
                             </div>
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800">郵件通知設定</h2>
-                                <p className="text-sm text-slate-500">依選定星期與時間寄送 On-going 待辦事項提醒</p>
+                                <p className="text-sm text-slate-500">設定 EmailJS 服務並手動發送 On-going 通知</p>
                             </div>
                         </div>
-                        {notificationError && (
-                            <div className="mb-4 text-sm text-red-600">{notificationError}</div>
-                        )}
                         {emailServiceError && (
                             <div className="mb-4 text-sm text-red-600">{emailServiceError}</div>
                         )}
                         <div className="flex flex-col gap-4">
-                            <div data-testid="notification-weekdays">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">通知星期</label>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-slate-700">
-                                    {WEEKDAY_OPTIONS.map((option) => (
-                                        <label key={option.key} className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={notificationDays.includes(option.key)}
-                                                onChange={() => handleToggleNotificationDay(option.key)}
-                                                className="h-4 w-4"
-                                                data-testid={`notification-weekday-${option.key}`}
-                                            />
-                                            {option.label}
-                                        </label>
-                                    ))}
-                                </div>
-                                <p className="mt-2 text-xs text-slate-400">排程會依選定星期在固定時間發送郵件。</p>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">通知時間</label>
-                                <input
-                                    type="time"
-                                    value={notificationTime}
-                                    onChange={(e) => setNotificationTime(e.target.value)}
-                                    className="w-full p-2 border rounded"
-                                    data-testid="notification-time-input"
-                                />
-                                <p className="mt-2 text-xs text-slate-400">郵件通知需由後端排程服務觸發，確保未開啟頁面時仍能準時寄送。</p>
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleSaveNotificationSettings}
-                                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={!db || isNotificationSaving}
-                                    data-testid="notification-save-button"
-                                >
-                                    {isNotificationSaving ? '儲存中...' : '儲存設定'}
-                                </button>
-                            </div>
                             <div className="pt-4 border-t border-slate-100 space-y-3">
                                 <h3 className="text-sm font-bold text-slate-700">EmailJS 發信服務設定</h3>
                                 <p className="text-xs text-slate-400">
@@ -1973,7 +1796,6 @@
             const localeConvertersRef = useRef(null);
             const originalLocaleTextRef = useRef(new WeakMap());
             const isLocaleUpdatingRef = useRef(false);
-            const notificationSendingRef = useRef(false);
 
             const testConfig = useMemo(() => {
                 const params = new URLSearchParams(window.location.search);
@@ -2143,68 +1965,6 @@
                 if (connectionStatus.includes('測試模式')) return 'bg-amber-400';
                 return 'bg-slate-400';
             }, [connectionStatus]);
-
-            useEffect(() => {
-                if (!db || !user || !isUserAdmin || testConfig.enabled) return;
-                let isCancelled = false;
-                const notificationsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'notifications');
-                const emailServiceRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'emailService');
-                const runNotificationCheck = async () => {
-                    if (notificationSendingRef.current || isCancelled) return;
-                    notificationSendingRef.current = true;
-                    try {
-                        const now = new Date();
-                        const notificationSnap = await getDoc(notificationsRef);
-                        const settings = notificationSnap.exists() ? notificationSnap.data() : {};
-                        if (settings.triggerSource === 'server') {
-                        console.log("通知任務由伺服器端執行中，瀏覽器端已跳過自動發信檢查。");
-                        notificationSendingRef.current = false;
-                        return; 
-                        }
-                        if (!shouldSendDailyNotification(settings, now)) return;
-                        const emailServiceSnap = await getDoc(emailServiceRef);
-                        if (!emailServiceSnap.exists()) {
-                            console.warn('Email service 設定尚未完成，跳過每日提醒。');
-                            return;
-                        }
-                        const emailConfig = emailServiceSnap.data();
-                        if (!emailConfig.serviceId || !emailConfig.templateId || !emailConfig.publicKey) {
-                            console.warn('Email service 設定不完整，跳過每日提醒。');
-                            return;
-                        }
-                        const taskSnapshot = await getDocs(query(collectionGroup(db, 'tasks')));
-                        const tasks = taskSnapshot.docs.map((docSnap) => docSnap.data());
-                        const usersSnapshot = await getDocs(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'));
-                        const userEmails = usersSnapshot.docs
-                            .map((docSnap) => docSnap.data()?.email)
-                            .filter(Boolean);
-                        const payloads = buildNotificationPayloads(tasks, userEmails, now);
-                        if (!payloads.length) return;
-                        for (const payload of payloads) {
-                            await sendEmailJsNotification(emailConfig, payload);
-                        }
-                        await setDoc(
-                            notificationsRef,
-                            {
-                                lastSentDate: formatLocalDate(now),
-                                lastSentAt: serverTimestamp(),
-                                lastSentCount: payloads.length
-                            },
-                            { merge: true }
-                        );
-                    } catch (error) {
-                        console.error('Daily notification error:', error);
-                    } finally {
-                        notificationSendingRef.current = false;
-                    }
-                };
-                runNotificationCheck();
-                const intervalId = setInterval(runNotificationCheck, 60000);
-                return () => {
-                    isCancelled = true;
-                    clearInterval(intervalId);
-                };
-            }, [db, user, isUserAdmin, testConfig.enabled]);
 
             const handleSaveGeminiKey = (key) => {
                 alert("API Key 已內建，無需設定！");
