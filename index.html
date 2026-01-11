@@ -118,7 +118,7 @@
         const DEFAULT_LOCALE = "zh-Hant";
         const GEMINI_API_KEY = "AIzaSyAsnzwjsrisZVpCvmTiQVeK9lIZLeissoY";
         const AIVRES_EMAIL_DOMAIN = "@aivres.com";
-        const NOTIFICATION_EMAIL_DOMAIN = "@aivre.com";
+        const NOTIFICATION_EMAIL_DOMAIN = "@aivres.com";
 
         // --- 1. Firebase Configuration ---
         const DEFAULT_CONFIG = {
@@ -2146,8 +2146,11 @@
                         const now = new Date();
                         const notificationSnap = await getDoc(notificationsRef);
                         const settings = notificationSnap.exists() ? notificationSnap.data() : {};
-                        if (settings.triggerSource && settings.triggerSource !== 'client') return;
-                        if (!settings.triggerSource) return;
+                        if (settings.triggerSource === 'server') {
+                        console.log("通知任務由伺服器端執行中，瀏覽器端已跳過自動發信檢查。");
+                        notificationSendingRef.current = false;
+                        return; 
+                        }
                         if (!shouldSendDailyNotification(settings, now)) return;
                         const emailServiceSnap = await getDoc(emailServiceRef);
                         if (!emailServiceSnap.exists()) {
