@@ -14,7 +14,11 @@ test('顯示郵件通知設定區塊', async ({ page }) => {
   await expect(section).toBeVisible();
   await expect(page.getByTestId('notification-enabled')).toBeVisible();
   await expect(page.getByTestId('notification-time-input')).toHaveValue('09:00');
+  await expect(page.getByTestId('notification-weekday-mon')).toBeChecked();
   await expect(page.getByTestId('notification-save-button')).toBeVisible();
+
+  fs.mkdirSync('tests/screenshots', { recursive: true });
+  await section.screenshot({ path: 'tests/screenshots/notification-weekdays.png' });
 });
 
 test('負責人欄位顯示已註冊使用者下拉選單', async ({ page }) => {
