@@ -15,12 +15,12 @@ test('顯示郵件通知設定區塊', async ({ page }) => {
 
   const section = page.getByTestId('notification-settings');
   await expect(section).toBeVisible();
-  await expect(page.getByTestId('notification-enabled')).toBeVisible();
   await expect(page.getByTestId('notification-time-input')).toHaveValue('09:00');
   await expect(page.getByTestId('notification-weekday-mon')).toBeChecked();
   await expect(page.getByTestId('notification-save-button')).toBeVisible();
   await expect(page.getByTestId('notification-manual-trigger')).toBeVisible();
   await expect(page.getByTestId('notification-manual-trigger-button')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '發送 On-going 通知' })).toBeVisible();
 
   fs.mkdirSync('tests/screenshots', { recursive: true });
   await section.screenshot({ path: 'tests/screenshots/notification-weekdays.jpg', type: 'jpeg', quality: 60 });
@@ -40,7 +40,7 @@ test('負責人欄位顯示已註冊使用者下拉選單', async ({ page }) => 
   await expect(page.locator('datalist#assignee-options option')).toHaveCount(2);
 });
 
-test('測試通知需先完成 EmailJS 設定', async ({ page }) => {
+test('手動發送通知需先完成 EmailJS 設定', async ({ page }) => {
   const testUserEmail = process.env.TEST_USER_EMAIL;
   test.skip(!testUserEmail, '需要設定 TEST_USER_EMAIL 以進入系統設定');
 
@@ -52,12 +52,9 @@ test('測試通知需先完成 EmailJS 設定', async ({ page }) => {
   await expect(page.getByTestId('emailjs-template-id')).toBeVisible();
   await expect(page.getByTestId('emailjs-public-key')).toBeVisible();
 
-  await page.getByTestId('notification-test-email').fill('alice@example.com');
-  await page.getByTestId('notification-test-button').click();
+  await page.getByTestId('notification-manual-trigger-button').click();
 
-  const modal = page.getByTestId('notification-test-modal');
-  await expect(modal).toBeVisible();
-  await expect(modal).toContainText('請先完成 EmailJS 服務設定');
+  await expect(page.getByText('請先完成 EmailJS 服務設定')).toBeVisible();
 });
 
 test('已註冊使用者列表標題顯示', async ({ page }) => {

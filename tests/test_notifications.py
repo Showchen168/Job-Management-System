@@ -93,11 +93,10 @@ def test_is_scheduled_day_handles_empty_selection():
     assert normalize_days_of_week("Mon") == {"mon"}
 
 
-def test_trigger_daily_notifications_returns_payloads_when_enabled():
+def test_trigger_daily_notifications_returns_payloads_when_scheduled():
     # Fixed: Use dailyTime instead of daily_time
     settings = NotificationSettings(
         dailyTime="09:00",
-        enabled=True,
         daysOfWeek=("mon",),
     )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
@@ -114,7 +113,6 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
 def test_trigger_daily_notifications_allows_repeat_when_requested():
     settings = NotificationSettings(
         dailyTime="09:00",
-        enabled=True,
         daysOfWeek=("mon",),
     )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
@@ -129,11 +127,9 @@ def test_trigger_daily_notifications_allows_repeat_when_requested():
     assert payloads
 
 
-def test_trigger_daily_notifications_skips_when_disabled():
-    # Fixed: Use dailyTime instead of daily_time
+def test_trigger_daily_notifications_skips_before_schedule():
     settings = NotificationSettings(
         dailyTime="09:00",
-        enabled=False,
         daysOfWeek=("mon",),
     )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
@@ -141,6 +137,6 @@ def test_trigger_daily_notifications_skips_when_disabled():
         settings,
         tasks,
         ["alice@aivres.com"],
-        now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
+        now=datetime(2024, 1, 1, 8, 30, tzinfo=ZoneInfo("Asia/Taipei")),
     )
     assert payloads == []
