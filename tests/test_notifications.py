@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -24,6 +25,14 @@ def test_parse_notification_time_valid():
 def test_parse_notification_time_invalid():
     with pytest.raises(ValueError):
         parse_notification_time("9:30")
+    with pytest.raises(ValueError):
+        parse_notification_time(930)
+
+
+def test_parse_notification_time_accepts_datetime_and_time():
+    sample_datetime = datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei"))
+    assert parse_notification_time(sample_datetime) == time(9, 30, tzinfo=sample_datetime.tzinfo)
+    assert parse_notification_time(time(18, 5)) == time(18, 5)
 
 
 def test_build_on_going_notifications_groups_by_assignee():
@@ -51,33 +60,39 @@ def test_prepare_notification_payloads_formats_subject_and_body():
 
 
 def test_should_send_notification_respects_daily_schedule():
-    now = datetime(2024, 1, 1, 9, 0)
+    now = datetime(2024, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Taipei"))
     assert should_send_notification(now, "09:00") is True
     assert should_send_notification(now, "09:00", last_sent_date=date(2024, 1, 1)) is False
     assert should_send_notification(now, "09:00", last_sent_date="2024-01-01") is False
 
 
 def test_should_send_notification_respects_selected_weekdays():
-    now = datetime(2024, 1, 1, 9, 0)
+    now = datetime(2024, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Taipei"))
     assert should_send_notification(now, "09:00", days_of_week=["mon", "tue"]) is True
     assert should_send_notification(now, "09:00", days_of_week=["tue", "wed"]) is False
 
 
 def test_is_scheduled_day_handles_empty_selection():
-    now = datetime(2024, 1, 1, 9, 0)
+    now = datetime(2024, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Taipei"))
     assert is_scheduled_day(now, []) is False
     assert normalize_days_of_week(["mon", "fri"]) == {"mon", "fri"}
+    assert normalize_days_of_week("Mon") == {"mon"}
 
 
 def test_trigger_daily_notifications_returns_payloads_when_enabled():
     # Fixed: Use dailyTime instead of daily_time
-    settings = NotificationSettings(dailyTime="09:00", enabled=True, daysOfWeek=("mon",))
+    settings = NotificationSettings(
+        dailyTime="09:00",
+        enabled=True,
+        daysOfWeek=("mon",),
+        timeZone="Asia/Taipei",
+    )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
         tasks,
         ["alice@example.com"],
-        now=datetime(2024, 1, 1, 9, 30),
+        now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
     )
     assert payloads
     assert payloads[0]["to"] == "alice@example.com"
@@ -85,12 +100,17 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
 
 def test_trigger_daily_notifications_skips_when_disabled():
     # Fixed: Use dailyTime instead of daily_time
-    settings = NotificationSettings(dailyTime="09:00", enabled=False, daysOfWeek=("mon",))
+    settings = NotificationSettings(
+        dailyTime="09:00",
+        enabled=False,
+        daysOfWeek=("mon",),
+        timeZone="Asia/Taipei",
+    )
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
         tasks,
         ["alice@example.com"],
-        now=datetime(2024, 1, 1, 9, 30),
+        now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
     )
     assert payloads == []

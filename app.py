@@ -41,9 +41,16 @@ def normalize_last_sent_date(value):
 
 
 def parse_notification_time(value):
-    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+    if isinstance(value, datetime):
+        return value.time()
+    if isinstance(value, time):
+        return value
+    if not isinstance(value, str):
         raise ValueError("通知時間格式不正確")
-    hour, minute = value.split(":")
+    normalized = value.strip()
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", normalized):
+        raise ValueError("通知時間格式不正確")
+    hour, minute = normalized.split(":")
     return time(hour=int(hour), minute=int(minute))
 
 
@@ -52,6 +59,8 @@ def normalize_days_of_week(days_of_week):
         return set(DEFAULT_DAYS_OF_WEEK)
     if not days_of_week:
         return set()
+    if isinstance(days_of_week, str):
+        days_of_week = [days_of_week]
     normalized = set()
     for item in days_of_week:
         if isinstance(item, int) and 0 <= item <= 6:
