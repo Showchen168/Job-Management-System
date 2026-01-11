@@ -1,6 +1,6 @@
 {
   "name": "job-management-system",
-  "version": "v2.5.7",
+  "version": "v2.5.8",
   "private": true,
   "scripts": {
     "test": "playwright test",

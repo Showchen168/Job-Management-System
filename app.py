@@ -5,7 +5,7 @@ import os
 import json
 import sys
 
-APP_VERSION = "v2.5.7"  # Updated version
+APP_VERSION = "v2.5.8"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 DEFAULT_DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_LOOKUP = {key: index for index, key in enumerate(DEFAULT_DAYS_OF_WEEK)}
@@ -15,7 +15,6 @@ NOTIFICATION_EMAIL_DOMAIN = "@aivre.com"
 @dataclass(frozen=True)
 class NotificationSettings:
     dailyTime: str  # Fixed: Aligned with frontend field name (dailyTime)
-    enabled: bool = True
     daysOfWeek: tuple = DEFAULT_DAYS_OF_WEEK
 
 
@@ -179,7 +178,7 @@ def prepare_notification_payloads(tasks, user_emails, notify_date=None):
 
 
 def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sent_date=None, allow_repeat=False):
-    if not settings or not settings.enabled:
+    if not settings:
         return []
     now = now or datetime.now()
     # Fixed: Access .dailyTime instead of .daily_time
@@ -239,7 +238,6 @@ if __name__ == "__main__":
         s_data = settings_doc.to_dict()
         settings = NotificationSettings(
             dailyTime=s_data.get('dailyTime', '09:00'),
-            enabled=s_data.get('enabled', False),
             daysOfWeek=tuple(s_data.get('daysOfWeek', []))
         )
 
