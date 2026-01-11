@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
+import os
+import json
 
 APP_VERSION = "v2.5.5"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
@@ -178,5 +180,28 @@ def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sen
 
 
 if __name__ == "__main__":
+    # 1. 驗證版本
     validate_version(APP_VERSION)
-    print(f"Version: {APP_VERSION}")
+    print(f"Starting Notification Service {APP_VERSION}...")
+
+    # 2. 從 GitHub Secrets (環境變數) 讀取配置
+    # 這裡示範讀取方式，名稱必須與您在 GitHub 設定的一致
+    email_config = {
+        "serviceId": os.getenv("EMAILJS_SERVICE_ID"),
+        "templateId": os.getenv("EMAILJS_TEMPLATE_ID"),
+        "publicKey": os.getenv("EMAILJS_PUBLIC_KEY")
+    }
+
+    # 檢查必要環境變數是否存在
+    if not all(email_config.values()):
+        print("錯誤：缺少必要的 EmailJS 環境變數設定。")
+        # 在 GitHub Actions 中，sys.exit(1) 會回報執行失敗
+        import sys
+        sys.exit(1)
+
+    print("環境變數讀取成功，準備執行排程檢查...")
+    
+    # 3. 此處應加入連接 Firebase 並獲取資料的邏輯
+    # 注意：在後端 Python 執行時，您需要初始化 firebase-admin
+    # 並呼叫 trigger_daily_notifications 函數
+    print("通知檢查完成。")
