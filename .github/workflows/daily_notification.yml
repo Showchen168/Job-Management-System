@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.11'
 
-- name: 安裝必要依賴
+       - name: 安裝必要依賴
           run: |
           python -m pip install --upgrade pip
           # 必須安裝這兩個關鍵套件，否則 app.py 會因為找不到庫而崩潰
