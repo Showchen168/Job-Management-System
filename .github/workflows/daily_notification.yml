@@ -25,7 +25,7 @@ jobs:
 
       - name: 執行發信腳本
         env:
-          # --- 關鍵修正：將 GitHub Secrets 映射給環境變數 ---
+          # --- 核心修正：將保險箱 (Secrets) 的變數映射給程式 ---
           EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
           EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
           EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
