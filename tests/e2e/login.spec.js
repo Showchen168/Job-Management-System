@@ -13,7 +13,7 @@ test('登入頁面顯示並產生截圖', async ({ page }) => {
   await expect(page.getByTestId('login-submit')).toBeVisible();
 
   fs.mkdirSync('tests/screenshots', { recursive: true });
-  await page.screenshot({ path: 'tests/screenshots/login-page.png', fullPage: true });
+  await page.screenshot({ path: 'tests/screenshots/login-page.jpg', fullPage: true, type: 'jpeg', quality: 60 });
 });
 
 test('測試模式登入成功畫面並產生截圖', async ({ page }) => {
@@ -25,5 +25,5 @@ test('測試模式登入成功畫面並產生截圖', async ({ page }) => {
   await expect(page.getByTestId('app-shell')).toBeVisible();
 
   fs.mkdirSync('tests/screenshots', { recursive: true });
-  await page.screenshot({ path: 'tests/screenshots/login-success.png', fullPage: true });
+  await page.screenshot({ path: 'tests/screenshots/login-success.jpg', fullPage: true, type: 'jpeg', quality: 60 });
 });
