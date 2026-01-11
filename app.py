@@ -3,6 +3,7 @@ from datetime import date, datetime, time
 import re
 import os
 import json
+import sys
 
 APP_VERSION = "v2.5.5"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
@@ -184,24 +185,93 @@ if __name__ == "__main__":
     validate_version(APP_VERSION)
     print(f"Starting Notification Service {APP_VERSION}...")
 
-    # 2. 從 GitHub Secrets (環境變數) 讀取配置
-    # 這裡示範讀取方式，名稱必須與您在 GitHub 設定的一致
+    # 2. 讀取 GitHub Secrets 環境變數
     email_config = {
         "serviceId": os.getenv("EMAILJS_SERVICE_ID"),
         "templateId": os.getenv("EMAILJS_TEMPLATE_ID"),
         "publicKey": os.getenv("EMAILJS_PUBLIC_KEY")
     }
 
-    # 檢查必要環境變數是否存在
     if not all(email_config.values()):
         print("錯誤：缺少必要的 EmailJS 環境變數設定。")
-        # 在 GitHub Actions 中，sys.exit(1) 會回報執行失敗
-        import sys
         sys.exit(1)
 
-    print("環境變數讀取成功，準備執行排程檢查...")
-    
-    # 3. 此處應加入連接 Firebase 並獲取資料的邏輯
-    # 注意：在後端 Python 執行時，您需要初始化 firebase-admin
-    # 並呼叫 trigger_daily_notifications 函數
-    print("通知檢查完成。")
+    print("環境變數讀取成功，正在初始化 Firebase...")
+
+    # 3. 初始化 Firebase Admin SDK
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore
+        import requests # 用於呼叫 EmailJS API
+
+        # 從環境變數讀取 Service Account JSON
+        cred_json = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+        if not cred_json:
+            print("錯誤：缺少 FIREBASE_SERVICE_ACCOUNT 環境變數。")
+            sys.exit(1)
+        
+        cred = credentials.Certificate(json.loads(cred_json))
+        firebase_admin.initialize_app(cred)
+        db = firestore.client()
+
+        # 4. 從 Firestore 獲取資料
+        print("正在獲取系統設定與任務列表...")
+        # 獲取通知設定
+        settings_doc = db.document('artifacts/work-tracker-v1/public/data/settings/notifications').get()
+        if not settings_doc.exists:
+            print("找不到通知設定，跳過執行。")
+            sys.exit(0)
+        
+        s_data = settings_doc.to_dict()
+        settings = NotificationSettings(
+            dailyTime=s_data.get('dailyTime', '09:00'),
+            enabled=s_data.get('enabled', False),
+            daysOfWeek=tuple(s_data.get('daysOfWeek', []))
+        )
+
+        # 獲取所有任務與使用者 Email 清單
+        tasks = [doc.to_dict() for doc in db.collection_group('tasks').get()]
+        user_emails = [doc.to_dict().get('email') for doc in db.collection('artifacts/work-tracker-v1/public/data/users').get()]
+        user_emails = [e for e in user_emails if e] # 過濾空值
+
+        # 5. 判斷是否發送通知
+        payloads = trigger_daily_notifications(
+            settings, tasks, user_emails, 
+            last_sent_date=s_data.get('lastSentDate')
+        )
+
+        if payloads:
+            print(f"偵測到 {len(payloads)} 則待發送通知，準備呼叫 EmailJS...")
+            for p in payloads:
+                api_res = requests.post(
+                    "https://api.emailjs.com/api/v1.0/email/send",
+                    json={
+                        "service_id": email_config["serviceId"],
+                        "template_id": email_config["templateId"],
+                        "user_id": email_config["publicKey"],
+                        "template_params": {
+                            "to_email": p["to"],
+                            "subject": p["subject"],
+                            "message": p["body"],
+                            "from_name": "Job Management System (Auto)"
+                        }
+                    }
+                )
+                if api_res.status_code == 200:
+                    print(f"成功寄送至: {p['to']}")
+                else:
+                    print(f"發送失敗 ({p['to']}): {api_res.text}")
+
+            # 6. 更新最後發送日期
+            db.document('artifacts/work-tracker-v1/public/data/settings/notifications').update({
+                'lastSentDate': date.today().isoformat(),
+                'lastSentAt': firestore.SERVER_TIMESTAMP
+            })
+        else:
+            print("未達發送條件（時間未到、今天已發過、或無進行中事項）。")
+
+    except Exception as e:
+        print(f"執行過程中發生異常: {str(e)}")
+        sys.exit(1)
+
+    print("通知排程檢查完成。")
