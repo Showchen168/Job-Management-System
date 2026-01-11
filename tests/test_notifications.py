@@ -5,6 +5,8 @@ import pytest
 from app import (
     NotificationSettings,
     build_on_going_notifications,
+    is_scheduled_day,
+    normalize_days_of_week,
     parse_notification_time,
     prepare_notification_payloads,
     resolve_assignee_email,
@@ -55,9 +57,21 @@ def test_should_send_notification_respects_daily_schedule():
     assert should_send_notification(now, "09:00", last_sent_date="2024-01-01") is False
 
 
+def test_should_send_notification_respects_selected_weekdays():
+    now = datetime(2024, 1, 1, 9, 0)
+    assert should_send_notification(now, "09:00", days_of_week=["mon", "tue"]) is True
+    assert should_send_notification(now, "09:00", days_of_week=["tue", "wed"]) is False
+
+
+def test_is_scheduled_day_handles_empty_selection():
+    now = datetime(2024, 1, 1, 9, 0)
+    assert is_scheduled_day(now, []) is False
+    assert normalize_days_of_week(["mon", "fri"]) == {"mon", "fri"}
+
+
 def test_trigger_daily_notifications_returns_payloads_when_enabled():
     # Fixed: Use dailyTime instead of daily_time
-    settings = NotificationSettings(dailyTime="09:00", enabled=True)
+    settings = NotificationSettings(dailyTime="09:00", enabled=True, daysOfWeek=("mon",))
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
@@ -71,7 +85,7 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
 
 def test_trigger_daily_notifications_skips_when_disabled():
     # Fixed: Use dailyTime instead of daily_time
-    settings = NotificationSettings(dailyTime="09:00", enabled=False)
+    settings = NotificationSettings(dailyTime="09:00", enabled=False, daysOfWeek=("mon",))
     tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
     payloads = trigger_daily_notifications(
         settings,
