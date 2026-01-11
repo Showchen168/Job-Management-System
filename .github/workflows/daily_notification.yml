@@ -2,10 +2,9 @@ name: Daily Notification Service
 
 on:
   schedule:
-    # 這裡設定執行時間（使用 UTC 時間）。
-    # 例如：想在台灣時間 09:00 發送，UTC 時間則為 01:00。
+    # 台灣時間 09:00 (UTC 01:00) 執行
     - cron: '0 1 * * *'
-  workflow_dispatch: # 允許手動點擊按鈕執行測試
+  workflow_dispatch: # 允許手動執行
 
 jobs:
   send-notifications:
@@ -19,19 +18,18 @@ jobs:
         with:
           python-version: '3.11'
 
-       - name: 安裝必要依賴
-          run: |
+      - name: 安裝必要依賴
+        run: |
           python -m pip install --upgrade pip
-          # 必須安裝這兩個關鍵套件，否則 app.py 會因為找不到庫而崩潰
           pip install firebase-admin requests
 
       - name: 執行發信腳本
         env:
-          # 將保險箱的變數提取到環境變數中供 app.py 使用
-          FIREBASE_API_KEY: AIzaSyAGezrKXfKSwvh1Aauy-wrTr53e_WtuXVE
-          EMAILJS_SERVICE_ID: service_lxz2d5r
-          EMAILJS_TEMPLATE_ID: template_y7mpv11
-          EMAILJS_PUBLIC_KEY: DAmCm7X3gOYVxpRHy
+          # --- 關鍵修正：將 GitHub Secrets 映射給環境變數 ---
+          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          # ---------------------------------------------
         run: |
-          # 執行您的 app.py
           python app.py
