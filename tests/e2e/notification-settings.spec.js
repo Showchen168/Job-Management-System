@@ -19,9 +19,12 @@ test('顯示郵件通知設定區塊', async ({ page }) => {
   await expect(page.getByTestId('notification-time-input')).toHaveValue('09:00');
   await expect(page.getByTestId('notification-weekday-mon')).toBeChecked();
   await expect(page.getByTestId('notification-save-button')).toBeVisible();
+  await expect(page.getByTestId('notification-manual-trigger')).toBeVisible();
+  await expect(page.getByTestId('notification-manual-trigger-button')).toBeVisible();
 
   fs.mkdirSync('tests/screenshots', { recursive: true });
-  await section.screenshot({ path: 'tests/screenshots/notification-weekdays.png' });
+  await section.screenshot({ path: 'tests/screenshots/notification-weekdays.jpg', type: 'jpeg', quality: 60 });
+  await page.getByTestId('notification-manual-trigger').screenshot({ path: 'tests/screenshots/notification-manual-trigger.jpg', type: 'jpeg', quality: 60 });
 });
 
 test('負責人欄位顯示已註冊使用者下拉選單', async ({ page }) => {
@@ -70,5 +73,5 @@ test('已註冊使用者列表標題顯示', async ({ page }) => {
   await expect(userRegistry.getByRole('columnheader', { name: '使用者' })).toBeVisible();
 
   fs.mkdirSync('tests/screenshots', { recursive: true });
-  await userRegistry.screenshot({ path: 'tests/screenshots/registered-users-table.png' });
+  await userRegistry.screenshot({ path: 'tests/screenshots/registered-users-table.jpg', type: 'jpeg', quality: 60 });
 });

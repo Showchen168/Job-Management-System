@@ -10,6 +10,7 @@ from app import (
     normalize_days_of_week,
     parse_notification_time,
     prepare_notification_payloads,
+    parse_allow_repeat,
     resolve_assignee_email,
     should_send_notification,
     trigger_daily_notifications,
@@ -33,6 +34,14 @@ def test_parse_notification_time_accepts_datetime_and_time():
     sample_datetime = datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei"))
     assert parse_notification_time(sample_datetime) == time(9, 30, tzinfo=sample_datetime.tzinfo)
     assert parse_notification_time(time(18, 5)) == time(18, 5)
+
+
+def test_parse_allow_repeat_parses_truthy_values():
+    assert parse_allow_repeat("1") is True
+    assert parse_allow_repeat("true") is True
+    assert parse_allow_repeat("YES") is True
+    assert parse_allow_repeat(None) is False
+    assert parse_allow_repeat("0") is False
 
 
 def test_build_on_going_notifications_groups_by_assignee():
@@ -68,6 +77,7 @@ def test_should_send_notification_respects_daily_schedule():
     assert should_send_notification(now, "09:00") is True
     assert should_send_notification(now, "09:00", last_sent_date=date(2024, 1, 1)) is False
     assert should_send_notification(now, "09:00", last_sent_date="2024-01-01") is False
+    assert should_send_notification(now, "09:00", last_sent_date="2024-01-01", allow_repeat=True) is True
 
 
 def test_should_send_notification_respects_selected_weekdays():
@@ -99,6 +109,24 @@ def test_trigger_daily_notifications_returns_payloads_when_enabled():
     )
     assert payloads
     assert payloads[0]["to"] == "alice@aivre.com"
+
+
+def test_trigger_daily_notifications_allows_repeat_when_requested():
+    settings = NotificationSettings(
+        dailyTime="09:00",
+        enabled=True,
+        daysOfWeek=("mon",),
+    )
+    tasks = [{"title": "狀態更新", "status": "On-going", "assignee": "alice"}]
+    payloads = trigger_daily_notifications(
+        settings,
+        tasks,
+        ["alice@aivres.com"],
+        now=datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei")),
+        last_sent_date=date(2024, 1, 1),
+        allow_repeat=True,
+    )
+    assert payloads
 
 
 def test_trigger_daily_notifications_skips_when_disabled():
