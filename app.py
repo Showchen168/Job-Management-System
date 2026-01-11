@@ -154,9 +154,9 @@ def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=
         target = target.replace(tzinfo=now.tzinfo)
     if now < target:
         return False
-    normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
-    if normalized_last_sent_date and normalized_last_sent_date == now.date():
-        return False
+    #normalized_last_sent_date = normalize_last_sent_date(last_sent_date)
+    #if normalized_last_sent_date and normalized_last_sent_date == now.date():
+    #    return False
     return True
 
 
