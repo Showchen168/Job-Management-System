@@ -2,14 +2,17 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import re
 
-APP_VERSION = "v2.5.3"  # Updated version
+APP_VERSION = "v2.5.4"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
+DEFAULT_DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WEEKDAY_LOOKUP = {key: index for index, key in enumerate(DEFAULT_DAYS_OF_WEEK)}
 
 
 @dataclass(frozen=True)
 class NotificationSettings:
     dailyTime: str  # Fixed: Aligned with frontend field name (dailyTime)
     enabled: bool = True
+    daysOfWeek: tuple = DEFAULT_DAYS_OF_WEEK
 
 
 def get_version():
@@ -38,10 +41,44 @@ def normalize_last_sent_date(value):
 
 
 def parse_notification_time(value):
-    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+    if isinstance(value, datetime):
+        return value.time()
+    if isinstance(value, time):
+        return value
+    if not isinstance(value, str):
         raise ValueError("通知時間格式不正確")
-    hour, minute = value.split(":")
+    normalized = value.strip()
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", normalized):
+        raise ValueError("通知時間格式不正確")
+    hour, minute = normalized.split(":")
     return time(hour=int(hour), minute=int(minute))
+
+
+def normalize_days_of_week(days_of_week):
+    if days_of_week is None:
+        return set(DEFAULT_DAYS_OF_WEEK)
+    if not days_of_week:
+        return set()
+    if isinstance(days_of_week, str):
+        days_of_week = [days_of_week]
+    normalized = set()
+    for item in days_of_week:
+        if isinstance(item, int) and 0 <= item <= 6:
+            normalized.add(DEFAULT_DAYS_OF_WEEK[item])
+            continue
+        if isinstance(item, str):
+            key = item.strip().lower()
+            if key in WEEKDAY_LOOKUP:
+                normalized.add(key)
+    return normalized
+
+
+def is_scheduled_day(now, days_of_week=None):
+    normalized = normalize_days_of_week(days_of_week)
+    if not normalized:
+        return False
+    weekday_key = DEFAULT_DAYS_OF_WEEK[now.weekday()]
+    return weekday_key in normalized
 
 
 def is_on_going(status):
@@ -92,9 +129,11 @@ def format_notification_email(assignee_email, tasks, notify_date):
     return subject, "\n".join(lines)
 
 
-def should_send_notification(now, daily_time, last_sent_date=None):
+def should_send_notification(now, daily_time, last_sent_date=None, days_of_week=None):
     # Note: Keep argument name as daily_time for internal logic, 
     # but the value will come from settings.dailyTime
+    if not is_scheduled_day(now, days_of_week):
+        return False
     scheduled_time = parse_notification_time(daily_time)
     target = datetime.combine(now.date(), scheduled_time)
     if now < target:
@@ -120,7 +159,7 @@ def trigger_daily_notifications(settings, tasks, user_emails, now=None, last_sen
         return []
     now = now or datetime.now()
     # Fixed: Access .dailyTime instead of .daily_time
-    if not should_send_notification(now, settings.dailyTime, last_sent_date):
+    if not should_send_notification(now, settings.dailyTime, last_sent_date, settings.daysOfWeek):
         return []
     return prepare_notification_payloads(tasks, user_emails, notify_date=now.date())
 
