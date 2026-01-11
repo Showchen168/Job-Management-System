@@ -1,0 +1,36 @@
+name: Daily Notification Service
+
+on:
+  schedule:
+    # 這裡設定執行時間（使用 UTC 時間）。
+    # 例如：想在台灣時間 09:00 發送，UTC 時間則為 01:00。
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 允許手動點擊按鈕執行測試
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢出程式碼
+        uses: actions/checkout@v4
+
+      - name: 設定 Python 環境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安裝必要依賴
+        run: |
+          python -m pip install --upgrade pip
+          pip install firebase-admin  # 確保安裝了操作 Firebase 的套件
+
+      - name: 執行發信腳本
+        env:
+          # 將保險箱的變數提取到環境變數中供 app.py 使用
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
+          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
+          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+        run: |
+          # 執行您的 app.py
+          python app.py
