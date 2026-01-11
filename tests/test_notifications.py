@@ -10,6 +10,7 @@ from app import (
     normalize_days_of_week,
     parse_notification_time,
     prepare_notification_payloads,
+    parse_allow_repeat,
     resolve_assignee_email,
     should_send_notification,
     trigger_daily_notifications,
@@ -33,6 +34,14 @@ def test_parse_notification_time_accepts_datetime_and_time():
     sample_datetime = datetime(2024, 1, 1, 9, 30, tzinfo=ZoneInfo("Asia/Taipei"))
     assert parse_notification_time(sample_datetime) == time(9, 30, tzinfo=sample_datetime.tzinfo)
     assert parse_notification_time(time(18, 5)) == time(18, 5)
+
+
+def test_parse_allow_repeat_parses_truthy_values():
+    assert parse_allow_repeat("1") is True
+    assert parse_allow_repeat("true") is True
+    assert parse_allow_repeat("YES") is True
+    assert parse_allow_repeat(None) is False
+    assert parse_allow_repeat("0") is False
 
 
 def test_build_on_going_notifications_groups_by_assignee():

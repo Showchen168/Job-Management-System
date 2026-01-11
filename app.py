@@ -5,7 +5,7 @@ import os
 import json
 import sys
 
-APP_VERSION = "v2.5.6"  # Updated version
+APP_VERSION = "v2.5.7"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 DEFAULT_DAYS_OF_WEEK = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_LOOKUP = {key: index for index, key in enumerate(DEFAULT_DAYS_OF_WEEK)}
@@ -27,6 +27,13 @@ def validate_version(version):
     if not re.fullmatch(r"v\d+\.\d+\.[0-9]", version):
         raise ValueError("版本格式不正確")
     return True
+
+
+def parse_allow_repeat(value):
+    if value is None:
+        return False
+    normalized = str(value).strip().lower()
+    return normalized in {"1", "true", "yes", "y", "on"}
 
 
 def normalize_last_sent_date(value):
@@ -242,9 +249,13 @@ if __name__ == "__main__":
         user_emails = [e for e in user_emails if e] # 過濾空值
 
         # 5. 判斷是否發送通知
+        allow_repeat = parse_allow_repeat(os.getenv("ALLOW_REPEAT"))
         payloads = trigger_daily_notifications(
-            settings, tasks, user_emails, 
-            last_sent_date=s_data.get('lastSentDate')
+            settings,
+            tasks,
+            user_emails,
+            last_sent_date=s_data.get('lastSentDate'),
+            allow_repeat=allow_repeat,
         )
 
         if payloads:
@@ -269,11 +280,14 @@ if __name__ == "__main__":
                 else:
                     print(f"發送失敗 ({p['to']}): {api_res.text}")
 
-            # 6. 更新最後發送日期
-            db.document('artifacts/work-tracker-v1/public/data/settings/notifications').update({
-                'lastSentDate': date.today().isoformat(),
-                'lastSentAt': firestore.SERVER_TIMESTAMP
-            })
+            # 6. 更新最後發送日期（測試重送時不更新）
+            if allow_repeat:
+                print("測試模式允許重複寄送，已略過最後寄送日期更新。")
+            else:
+                db.document('artifacts/work-tracker-v1/public/data/settings/notifications').update({
+                    'lastSentDate': date.today().isoformat(),
+                    'lastSentAt': firestore.SERVER_TIMESTAMP
+                })
         else:
             print("未達發送條件（時間未到、今天已發過、或無進行中事項）。")
 
