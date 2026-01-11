@@ -27,10 +27,10 @@ jobs:
       - name: 執行發信腳本
         env:
           # 將保險箱的變數提取到環境變數中供 app.py 使用
-          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-          EMAILJS_SERVICE_ID: ${{ secrets.EMAILJS_SERVICE_ID }}
-          EMAILJS_TEMPLATE_ID: ${{ secrets.EMAILJS_TEMPLATE_ID }}
-          EMAILJS_PUBLIC_KEY: ${{ secrets.EMAILJS_PUBLIC_KEY }}
+          FIREBASE_API_KEY: AIzaSyAGezrKXfKSwvh1Aauy-wrTr53e_WtuXVE
+          EMAILJS_SERVICE_ID: service_lxz2d5r
+          EMAILJS_TEMPLATE_ID: template_y7mpv11
+          EMAILJS_PUBLIC_KEY: DAmCm7X3gOYVxpRHy
         run: |
           # 執行您的 app.py
           python app.py
