@@ -25,3 +25,9 @@ def test_validate_version_rejects_invalid_format():
 def test_validate_version_rejects_patch_over_9():
     with pytest.raises(ValueError):
         validate_version("v2.5.10")
+
+
+def test_app_version_patch_is_single_digit():
+    patch = APP_VERSION.split(".")[-1]
+    assert patch.isdigit()
+    assert len(patch) == 1
