@@ -2,9 +2,9 @@ from datetime import date
 import re
 import sys
 
-APP_VERSION = "v2.5.9"  # Updated version
+APP_VERSION = "v2.6.0"  # Updated version
 ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
-NOTIFICATION_EMAIL_DOMAIN = "@aivre.com"
+NOTIFICATION_EMAIL_DOMAIN = "@aivres.com"
 
 
 def get_version():
