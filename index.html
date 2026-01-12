@@ -1761,7 +1761,7 @@
                                     value={newAdminEmail}
                                     onChange={(e) => setNewAdminEmail(e.target.value)}
                                     onBlur={() => setNewAdminEmail(normalizePermissionEmail(newAdminEmail))}
-                                    placeholder="輸入使用者帳號或 Email"
+                                    placeholder="輸入使用者帳號"
                                     className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()}
                                     data-testid="admin-email-input"
@@ -1782,7 +1782,7 @@
                                     value={newEditorEmail}
                                     onChange={(e) => setNewEditorEmail(e.target.value)}
                                     onBlur={() => setNewEditorEmail(normalizePermissionEmail(newEditorEmail))}
-                                    placeholder="輸入使用者帳號或 Email"
+                                    placeholder="輸入使用者帳號"
                                     className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddEditor()}
                                     data-testid="editor-email-input"
