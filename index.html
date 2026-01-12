@@ -1442,7 +1442,7 @@
             };
             const handleAddAdmin = async () => {
                 const normalizedEmail = normalizePermissionEmail(newAdminEmail);
-                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號或 Email", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
                 const normalizedAdmins = [...cloudAdmins, ...rootAdmins].map((email) => email.toLowerCase());
                 if (normalizedAdmins.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
                 try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins'), { list: arrayUnion(normalizedEmail) }, { merge: true }); setNewAdminEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${normalizedEmail} 新增為管理員`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
@@ -1458,7 +1458,7 @@
 
             const handleAddEditor = async () => {
                 const normalizedEmail = normalizePermissionEmail(newEditorEmail);
-                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號或 Email", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
                 const normalizedEditors = cloudEditors.map((email) => email.toLowerCase());
                 const normalizedAdmins = [...cloudAdmins, ...rootAdmins].map((email) => email.toLowerCase());
                 if (normalizedEditors.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是編輯者", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
