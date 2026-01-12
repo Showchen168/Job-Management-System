@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.5.9</title>
+    <title>工作紀錄中心 v2.6.0</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,7 +102,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.5.9"; // Updated: notification weekdays
+        const APP_VERSION = "v2.6.0"; // Updated: permission email defaults
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -199,6 +199,16 @@
                 return prefix || null;
             }
             return normalized;
+        };
+
+        const normalizePermissionEmail = (value) => {
+            if (!value) return '';
+            const normalized = String(value).trim();
+            if (!normalized) return '';
+            if (normalized.includes('@')) {
+                return normalized.toLowerCase();
+            }
+            return `${normalized}${AIVRES_EMAIL_DOMAIN}`.toLowerCase();
         };
 
         const resolveAssigneeEmail = (assignee, userEmails = []) => {
@@ -1431,9 +1441,11 @@
                 }
             };
             const handleAddAdmin = async () => {
-                if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "Email 格式錯誤", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                if (cloudAdmins.includes(newAdminEmail.trim()) || rootAdmins.includes(newAdminEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins'), { list: arrayUnion(newAdminEmail.trim()) }, { merge: true }); setNewAdminEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newAdminEmail} 新增為管理員`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
+                const normalizedEmail = normalizePermissionEmail(newAdminEmail);
+                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號或 Email", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                const normalizedAdmins = [...cloudAdmins, ...rootAdmins].map((email) => email.toLowerCase());
+                if (normalizedAdmins.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'admins'), { list: arrayUnion(normalizedEmail) }, { merge: true }); setNewAdminEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${normalizedEmail} 新增為管理員`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
             const confirmRemoveAdmin = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${formatEmailPrefix(emailToRemove)} 的管理員權限？`, onConfirm: () => executeRemoveAdmin(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
@@ -1445,10 +1457,13 @@
             };
 
             const handleAddEditor = async () => {
-                if (!newEditorEmail.trim() || !newEditorEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "Email 格式錯誤", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                if (cloudEditors.includes(newEditorEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是編輯者", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                if (cloudAdmins.includes(newEditorEmail.trim()) || rootAdmins.includes(newEditorEmail.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
-                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors'), { list: arrayUnion(newEditorEmail.trim()) }, { merge: true }); setNewEditorEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${newEditorEmail} 新增為編輯者`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
+                const normalizedEmail = normalizePermissionEmail(newEditorEmail);
+                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號或 Email", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                const normalizedEditors = cloudEditors.map((email) => email.toLowerCase());
+                const normalizedAdmins = [...cloudAdmins, ...rootAdmins].map((email) => email.toLowerCase());
+                if (normalizedEditors.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是編輯者", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                if (normalizedAdmins.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是管理員", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors'), { list: arrayUnion(normalizedEmail) }, { merge: true }); setNewEditorEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${normalizedEmail} 新增為編輯者`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); } 
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
             const confirmRemoveEditor = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${formatEmailPrefix(emailToRemove)} 的編輯者權限？`, onConfirm: () => executeRemoveEditor(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
@@ -1739,18 +1754,42 @@
 
                     {/* Admin Management Panel */}
                     {isAdmin && (
-                        <div className="bg-yellow-50 p-8 rounded-xl shadow-sm border border-yellow-200">
+                        <div className="bg-yellow-50 p-8 rounded-xl shadow-sm border border-yellow-200" data-testid="admin-permission-section">
                             <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-yellow-100 rounded-full"><UserCog className="text-yellow-700" size={24} /></div><div><h2 className="text-xl font-bold text-yellow-900">使用者權限管理</h2><p className="text-sm text-yellow-700">管理誰可以修改全域設定</p></div></div>
-                            <div className="flex gap-2 mb-6"><input value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()} /><button onClick={handleAddAdmin} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm whitespace-nowrap">新增管理員</button></div>
+                            <div className="flex gap-2 mb-2">
+                                <input
+                                    value={newAdminEmail}
+                                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                                    onBlur={() => setNewAdminEmail(normalizePermissionEmail(newAdminEmail))}
+                                    placeholder="輸入使用者帳號或 Email"
+                                    className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddAdmin()}
+                                    data-testid="admin-email-input"
+                                />
+                                <button onClick={handleAddAdmin} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm whitespace-nowrap" data-testid="admin-email-submit">新增管理員</button>
+                            </div>
+                            <p className="text-xs text-yellow-700 mb-6">僅需輸入帳號，系統會自動補上 {AIVRES_EMAIL_DOMAIN}</p>
                             <div className="bg-white rounded-lg border border-yellow-200 overflow-hidden"><ul className="divide-y divide-yellow-100">{rootAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-bold text-slate-700"><ShieldCheck size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">系統預設</span></li>))}{cloudAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-yellow-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAdmin(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
                         </div>
                     )}
 
                     {/* Editor Management Panel */}
                     {isAdmin && (
-                        <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200">
+                        <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200" data-testid="editor-permission-section">
                             <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料，但不可使用 AI 與系統設定</p></div></div>
-                            <div className="flex gap-2 mb-6"><input value={newEditorEmail} onChange={(e) => setNewEditorEmail(e.target.value)} placeholder="輸入使用者 Email" className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white" onKeyDown={(e) => e.key === 'Enter' && handleAddEditor()} /><button onClick={handleAddEditor} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap">新增編輯者</button></div>
+                            <div className="flex gap-2 mb-2">
+                                <input
+                                    value={newEditorEmail}
+                                    onChange={(e) => setNewEditorEmail(e.target.value)}
+                                    onBlur={() => setNewEditorEmail(normalizePermissionEmail(newEditorEmail))}
+                                    placeholder="輸入使用者帳號或 Email"
+                                    className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddEditor()}
+                                    data-testid="editor-email-input"
+                                />
+                                <button onClick={handleAddEditor} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap" data-testid="editor-email-submit">新增編輯者</button>
+                            </div>
+                            <p className="text-xs text-blue-700 mb-6">僅需輸入帳號，系統會自動補上 {AIVRES_EMAIL_DOMAIN}</p>
                             <div className="bg-white rounded-lg border border-blue-200 overflow-hidden"><ul className="divide-y divide-blue-100">{cloudEditors.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無編輯者</li>) : cloudEditors.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-blue-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveEditor(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
                         </div>
                     )}
