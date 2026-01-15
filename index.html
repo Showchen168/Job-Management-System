@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.6.1</title>
+    <title>工作紀錄中心 v2.6.2</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -102,7 +102,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.6.1"; // Updated: permission email defaults
+        const APP_VERSION = "v2.6.2"; // AI對話式總結+Word下載, 匯出全欄位
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -452,13 +452,197 @@
                 setTimeout(() => setCopied(false), 2000);
             };
             return (
-                <button 
+                <button
                     onClick={handleCopy}
                     className={`mt-3 flex items-center gap-2 text-sm font-medium transition-colors ${copied ? 'text-green-600' : 'text-purple-600 hover:underline'}`}
                 >
-                    {copied ? <Check size={16} /> : <Copy size={16} />} 
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
                     {copied ? '已複製成功！' : '複製報告內容'}
                 </button>
+            );
+        };
+
+        // 下載 Word 文件功能
+        const downloadAsWord = (content, filename = 'AI_Report') => {
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <meta charset="utf-8">
+                    <title>${filename}</title>
+                    <style>
+                        body { font-family: '微軟正黑體', 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; padding: 20px; }
+                        h1, h2, h3 { color: #333; }
+                        p { margin: 10px 0; }
+                        pre { background: #f5f5f5; padding: 10px; white-space: pre-wrap; }
+                    </style>
+                </head>
+                <body>
+                    <div style="white-space: pre-wrap;">${content.replace(/\n/g, '<br>')}</div>
+                </body>
+                </html>
+            `;
+            const blob = new Blob(['\ufeff', htmlContent], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${filename}_${new Date().toISOString().split('T')[0]}.doc`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        // AI 對話 Modal 組件
+        const AIConversationModal = ({ isOpen, onClose, taskData, geminiApiKey }) => {
+            const [userPrompt, setUserPrompt] = useState('');
+            const [aiResponse, setAiResponse] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            const defaultPrompts = [
+                { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告，包含核心成果、進行中工作、風險與阻礙、下階段計劃。' },
+                { label: '會議報告', prompt: '請將以下工作內容整理成適合在會議中報告的格式，重點突出、簡潔明瞭。' },
+                { label: '郵件摘要', prompt: '請將以下工作內容整理成適合發送給主管的工作更新郵件內容，語氣專業且簡潔。' },
+                { label: '風險分析', prompt: '請分析以下工作內容中的風險和問題，並提供建議的解決方案。' }
+            ];
+
+            const handleSubmit = async () => {
+                if (!userPrompt.trim()) {
+                    setError('請輸入提示詞');
+                    return;
+                }
+                if (!geminiApiKey) {
+                    setError('尚未設定 Gemini API Key，請至系統設定填寫。');
+                    return;
+                }
+                setIsLoading(true);
+                setError('');
+                setAiResponse('');
+
+                const fullPrompt = [
+                    "### 用戶指令",
+                    userPrompt,
+                    "",
+                    "### 工作資料",
+                    taskData
+                ].join('\n');
+
+                try {
+                    const resultRaw = await callGeminiAI([{ text: fullPrompt }], geminiApiKey);
+                    const result = cleanAIResponse(resultRaw);
+                    setAiResponse(result);
+                } catch (e) {
+                    setError(e.message || '生成失敗，請稍後再試');
+                }
+                setIsLoading(false);
+            };
+
+            const handleDownloadWord = () => {
+                if (aiResponse) {
+                    downloadAsWord(aiResponse, 'AI_工作報告');
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden transform scale-100 transition-all flex flex-col max-h-[90vh]">
+                        <div className="p-6 flex-shrink-0 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-purple-100 rounded-full text-purple-600"><Bot size={24} /></div>
+                                <h3 className="text-lg font-bold text-slate-800">AI 智能對話總結</h3>
+                            </div>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {/* 快速選擇提示詞 */}
+                            <div className="mb-4">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">快速選擇提示詞</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {defaultPrompts.map((item, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => setUserPrompt(item.prompt)}
+                                            className="px-3 py-1.5 text-sm bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition border border-purple-200"
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 提示詞輸入 */}
+                            <div className="mb-4">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">輸入提示詞 <span className="text-red-500">*</span></label>
+                                <textarea
+                                    value={userPrompt}
+                                    onChange={(e) => setUserPrompt(e.target.value)}
+                                    placeholder="請輸入您希望 AI 如何處理工作資料的指令..."
+                                    className="w-full p-3 border border-slate-300 rounded-lg min-h-[100px] focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+
+                            {/* 錯誤訊息 */}
+                            {error && (
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* 送出按鈕 */}
+                            <div className="mb-4">
+                                <button
+                                    onClick={handleSubmit}
+                                    disabled={isLoading}
+                                    className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 size={18} className="animate-spin" />
+                                            AI 正在思考中...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles size={18} />
+                                            生成報告
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* AI 回應 */}
+                            {aiResponse && (
+                                <div className="mt-4">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">AI 回應</label>
+                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[40vh] overflow-y-auto">
+                                        {aiResponse}
+                                    </div>
+                                    <div className="flex gap-3 mt-3">
+                                        <CopyButton text={aiResponse} />
+                                        <button
+                                            onClick={handleDownloadWord}
+                                            className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
+                                        >
+                                            <Download size={16} />
+                                            下載 Word
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 flex-shrink-0">
+                            <button
+                                onClick={onClose}
+                                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition"
+                            >
+                                關閉
+                            </button>
+                        </div>
+                    </div>
+                </div>
             );
         };
 
@@ -929,6 +1113,8 @@
             const [aiReport, setAiReport] = useState('');
             const [filterStatus, setFilterStatus] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
+            const [showAIModal, setShowAIModal] = useState(false);
+            const [aiTaskData, setAiTaskData] = useState('');
             
             useEffect(() => {
                 if (!db || !user) return;
@@ -989,76 +1175,24 @@
                 setFilteredTasks(res);
             }, [tasks, filterStatus, searchQuery]);
 
-            const handleGenerateReport = async () => {
-                if (!filteredTasks.length) { setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
-                setAiLoading(true);
-                setModalConfig({ isOpen: true, type: 'ai', title: 'AI 正在思考中...', content: '正在撰寫報告...', onConfirm: null, confirmText: "", onCancel: null });
-                const taskData = filteredTasks.map((t, index) => {
+            const handleGenerateReport = () => {
+                if (!filteredTasks.length) {
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                    return;
+                }
+                // 準備任務資料給 AI 對話
+                const taskDataStr = filteredTasks.map((t, index) => {
                     const assignee = t.assignee || t.createdByEmail || 'Unknown';
                     const dueDate = t.dueDate || '未提供';
+                    const assignedDate = t.assignedDate || '未提供';
                     const status = t.status || '未提供';
                     const progress = t.progress || '未提供';
-                    return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；截止日=${dueDate}；狀態=${status}；進度=${progress}`;
+                    const source = t.source || '未提供';
+                    const delayReason = t.delayReason || '無';
+                    return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${source}；交辦日=${assignedDate}；截止日=${dueDate}；狀態=${status}；進度=${progress}；延遲原因=${delayReason}`;
                 }).join('\n');
-                const prompt = [
-                    "### 角色",
-                    "你是一位結果導向的「資深專案經理 (Senior Project Manager)」，擅長將零散的工作日誌、聊天記錄或郵件內容，轉化為高含金量的「管理層彙報摘要」。",
-                    "",
-                    "### 任務",
-                    "請根據提供的 [工作日誌/對話記錄/零散筆記]，整理出一份最新的工作進展報告。你的目標是展現產出與價值，而非僅僅列出做了什麼動作。",
-                    "",
-                    "### 情境",
-                    "- 閱讀對象為部門主管或客戶，時間寶貴，需要一眼看到重點。",
-                    "- 原始輸入可能包含執行細節（如：修復了某行代碼），你需要將其轉化為業務語言（如：提升了系統穩定性）。",
-                    "",
-                    "### 限制條件",
-                    "- **輸出格式**：Markdown 條列式。",
-                    "- **語氣風格**：自信、精簡、客觀 (Executive Summary Style)。",
-                    "- **核心原則**：",
-                    "  1. **量化成果**：如果有數字（時間、數量、百分比），務必強調。",
-                    "  2. **區分輕重**：將「已完成的重要成果」置頂，瑣碎事務概括帶過。",
-                    "  3. **強調阻礙**：若有卡關之處，必須明確指出需要什麼資源或協助。",
-                    "",
-                    "### 輸出範本架構",
-                    "# [專案/部門名稱] 工作進度彙報",
-                    "",
-                    "**📅 報告週期**：[日期範圍]",
-                    "**🚦 整體狀態**：[正常(綠燈) / 有風險(黃燈) / 嚴重延遲(紅燈)]",
-                    "",
-                    "## 1. 核心成果 (Key Achievements)",
-                    "> 說明本週期內「完成」的最重要事項，強調帶來的價值。",
-                    "- ✅ [成果 1]：[具體說明，例如：完成首頁改版，載入速度提升 20%]",
-                    "- ✅ [成果 2]：...",
-                    "",
-                    "## 2. 進行中工作 (Work in Progress)",
-                    "> 說明目前正在處理的大型任務及其預計完成時間。",
-                    "- 🔄 [任務名稱]：目前進度 [XX]%，預計 [日期] 完成。",
-                    "",
-                    "## 3. 風險與阻礙 (Blockers & Risks)",
-                    "> **(重要)** 需要主管關注或協助的地方。",
-                    "- ⚠️ [阻礙描述]：[影響範圍] -> [建議解決方案/需要的協助]",
-                    "",
-                    "## 4. 下階段計劃 (Next Steps)",
-                    "- [ ] [計劃 1]",
-                    "- [ ] [計劃 2]",
-                    "",
-                    "---",
-                    "",
-                    "### 原始工作內容",
-                    "請根據以下內容進行整理：",
-                    "",
-                    taskData
-                ].join('\n');
-                try {
-                    const resultRaw = await callGeminiAI([{ text: prompt }], geminiApiKey);
-                    const result = cleanAIResponse(resultRaw);
-                    setAiReport(result);
-                    setModalConfig({ 
-                        isOpen: true, type: 'ai', title: 'AI 智能進度總結', content: null, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null,
-                        children: (<div className="mt-4"><div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{result}</div><CopyButton text={result} /></div>)
-                    });
-                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '生成失敗', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
-                setAiLoading(false);
+                setAiTaskData(taskDataStr);
+                setShowAIModal(true);
             };
 
             const handleSave = async (formData) => {
@@ -1089,14 +1223,30 @@
                 } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
 
-            const handleExport = () => { 
-                const headers = [{key:'status',label:'狀態'},{key:'title',label:'事項'},{key:'assignee',label:'負責人'},{key:'createdByEmail',label:'建立者'}]; 
-                exportToCSV(filteredTasks, 'WorkTasks', headers); 
+            const handleExport = () => {
+                const headers = [
+                    {key:'status',label:'狀態'},
+                    {key:'source',label:'來源'},
+                    {key:'title',label:'事項'},
+                    {key:'assignee',label:'負責人'},
+                    {key:'createdByEmail',label:'建立者'},
+                    {key:'assignedDate',label:'交辦日期'},
+                    {key:'dueDate',label:'預計完成'},
+                    {key:'progress',label:'進度'},
+                    {key:'delayReason',label:'延遲原因'}
+                ];
+                exportToCSV(filteredTasks, 'WorkTasks', headers);
             };
 
             return (
                 <div className="space-y-6 animate-in fade-in">
                 <Modal {...modalConfig} />
+                <AIConversationModal
+                    isOpen={showAIModal}
+                    onClose={() => setShowAIModal(false)}
+                    taskData={aiTaskData}
+                    geminiApiKey={geminiApiKey}
+                />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
