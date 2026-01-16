@@ -607,33 +607,36 @@
             ];
 
             // 日期篩選邏輯
+            // 工作任務：不篩選任務本身，只篩選進展欄位內的日期文字
+            // 會議記錄：按會議日期篩選
             useEffect(() => {
                 if (!rawData || !Array.isArray(rawData)) {
                     setFilteredData(typeof rawData === 'string' ? rawData : '');
                     return;
                 }
 
-                let filtered = rawData;
-                if (startDate || endDate) {
-                    filtered = rawData.filter(item => {
-                        const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
-                        if (!itemDate) return false;
-                        const d = new Date(itemDate);
-                        if (startDate && d < new Date(startDate)) return false;
-                        if (endDate && d > new Date(endDate)) return false;
-                        return true;
-                    });
-                }
-
                 // 格式化資料為文字
                 if (dataType === 'meetings') {
+                    // 會議記錄：按會議日期篩選
+                    let filtered = rawData;
+                    if (startDate || endDate) {
+                        filtered = rawData.filter(item => {
+                            const itemDate = item.date;
+                            if (!itemDate) return false;
+                            const d = new Date(itemDate);
+                            if (startDate && d < new Date(startDate)) return false;
+                            if (endDate && d > new Date(endDate)) return false;
+                            return true;
+                        });
+                    }
                     const dataStr = filtered.map((m, index) => {
                         const content = m.content ? m.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '無內容';
                         return `會議${index + 1}：主題=${m.topic}；日期=${m.date}；主持人=${m.host}；分類=${m.category || '未分類'}；參會人員=${m.attendees || '未記錄'}；內容=${content.substring(0, 500)}`;
                     }).join('\n');
                     setFilteredData(dataStr);
                 } else {
-                    const dataStr = filtered.map((t, index) => {
+                    // 工作任務：不篩選任務，只篩選進展欄位內容
+                    const dataStr = rawData.map((t, index) => {
                         const assignee = t.assignee || t.createdByEmail || 'Unknown';
                         // 從進展中提取日期範圍內的內容
                         const filteredProgress = extractProgressByDateRange(t.progress, startDate, endDate) || '未提供';
@@ -700,15 +703,18 @@
 
             if (!isOpen) return null;
 
-            const dataCount = Array.isArray(rawData) ? (startDate || endDate ?
-                rawData.filter(item => {
-                    const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
+            // 工作任務：日期範圍只篩選進展內容，不篩選任務本身；會議記錄：按會議日期篩選
+            const dataCount = Array.isArray(rawData) ? (
+                dataType === 'tasks' ? rawData.length : // 工作任務顯示總數
+                (startDate || endDate ? rawData.filter(item => {
+                    const itemDate = item.date;
                     if (!itemDate) return false;
                     const d = new Date(itemDate);
                     if (startDate && d < new Date(startDate)) return false;
                     if (endDate && d > new Date(endDate)) return false;
                     return true;
-                }).length : rawData.length) : 0;
+                }).length : rawData.length)
+            ) : 0;
 
             return (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
