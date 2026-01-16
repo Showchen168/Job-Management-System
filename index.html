@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.8.1</title>
+    <title>工作紀錄中心 v2.8.2</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.8.1"; // 周報功能, 進展日期篩選優化(僅符合日期的任務納入總結)
+        const APP_VERSION = "v2.8.2"; // 修正 React Hooks 錯誤
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -713,9 +713,7 @@
                 onClose();
             };
 
-            if (!isOpen) return null;
-
-            // 計算篩選後的資料數量
+            // 計算篩選後的資料數量 (必須在 return 之前，遵守 React Hooks 規則)
             const dataCount = useMemo(() => {
                 if (!Array.isArray(rawData)) return 0;
                 if (!startDate && !endDate) return rawData.length;
@@ -738,6 +736,8 @@
                     }).length;
                 }
             }, [rawData, startDate, endDate, dataType]);
+
+            if (!isOpen) return null;
 
             return (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
