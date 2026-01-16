@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.8.0</title>
+    <title>工作紀錄中心 v2.8.1</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.8.0"; // AI總結進展日期篩選, Team管理功能, Leader可查看成員待辦
+        const APP_VERSION = "v2.8.1"; // 周報功能, 進展日期篩選優化(僅符合日期的任務納入總結)
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -601,43 +601,58 @@
                 { label: '報告格式', prompt: '請將以下會議記錄整理成適合發送給主管的報告格式，語氣專業且簡潔。請使用 Markdown 格式輸出。' }
             ] : [
                 { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告，包含核心成果、進行中工作、風險與阻礙、下階段計劃。請使用 Markdown 格式輸出，包含適當的標題和條列。' },
+                { label: '周報', prompt: '請根據以下工作進展，整理一份給領導的周報。格式要求：\n1. 本周完成事項（按重要性排序）\n2. 進行中工作及進度百分比\n3. 下周工作計劃\n4. 需要協調或支援事項\n\n請使用 Markdown 格式，語氣專業簡潔，突出重點成果。' },
                 { label: '會議報告', prompt: '請將以下工作內容整理成適合在會議中報告的格式，重點突出、簡潔明瞭。請使用 Markdown 格式輸出。' },
                 { label: '郵件摘要', prompt: '請將以下工作內容整理成適合發送給主管的工作更新郵件內容，語氣專業且簡潔。請使用 Markdown 格式輸出。' },
                 { label: '風險分析', prompt: '請分析以下工作內容中的風險和問題，並提供建議的解決方案。請使用 Markdown 格式輸出，使用表格呈現風險評估。' }
             ];
 
             // 日期篩選邏輯
+            // 工作任務：根據進展欄位內的日期篩選，若進展無符合日期的內容則不納入總結
+            // 會議記錄：按會議日期篩選
             useEffect(() => {
                 if (!rawData || !Array.isArray(rawData)) {
                     setFilteredData(typeof rawData === 'string' ? rawData : '');
                     return;
                 }
 
-                let filtered = rawData;
-                if (startDate || endDate) {
-                    filtered = rawData.filter(item => {
-                        const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
-                        if (!itemDate) return false;
-                        const d = new Date(itemDate);
-                        if (startDate && d < new Date(startDate)) return false;
-                        if (endDate && d > new Date(endDate)) return false;
-                        return true;
-                    });
-                }
-
                 // 格式化資料為文字
                 if (dataType === 'meetings') {
+                    // 會議記錄：按會議日期篩選
+                    let filtered = rawData;
+                    if (startDate || endDate) {
+                        filtered = rawData.filter(item => {
+                            const itemDate = item.date;
+                            if (!itemDate) return false;
+                            const d = new Date(itemDate);
+                            if (startDate && d < new Date(startDate)) return false;
+                            if (endDate && d > new Date(endDate)) return false;
+                            return true;
+                        });
+                    }
                     const dataStr = filtered.map((m, index) => {
                         const content = m.content ? m.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '無內容';
                         return `會議${index + 1}：主題=${m.topic}；日期=${m.date}；主持人=${m.host}；分類=${m.category || '未分類'}；參會人員=${m.attendees || '未記錄'}；內容=${content.substring(0, 500)}`;
                     }).join('\n');
                     setFilteredData(dataStr);
                 } else {
-                    const dataStr = filtered.map((t, index) => {
+                    // 工作任務：根據進展欄位內的日期篩選
+                    // 如果設定了日期範圍，只保留有符合日期進展的任務
+                    const tasksWithProgress = rawData.map(t => {
+                        const filteredProgress = extractProgressByDateRange(t.progress, startDate, endDate);
+                        return { task: t, filteredProgress };
+                    }).filter(item => {
+                        // 如果沒有設定日期範圍，保留所有任務
+                        if (!startDate && !endDate) return true;
+                        // 如果設定了日期範圍，只保留有符合日期進展的任務
+                        return item.filteredProgress && item.filteredProgress.trim() !== '';
+                    });
+
+                    const dataStr = tasksWithProgress.map((item, index) => {
+                        const t = item.task;
                         const assignee = t.assignee || t.createdByEmail || 'Unknown';
-                        // 從進展中提取日期範圍內的內容
-                        const filteredProgress = extractProgressByDateRange(t.progress, startDate, endDate) || '未提供';
-                        return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${t.source || '未提供'}；交辦日=${t.assignedDate || '未提供'}；截止日=${t.dueDate || '未提供'}；狀態=${t.status || '未提供'}；進度=${filteredProgress}；延遲原因=${t.delayReason || '無'}`;
+                        const progress = item.filteredProgress || '未提供';
+                        return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${t.source || '未提供'}；交辦日=${t.assignedDate || '未提供'}；截止日=${t.dueDate || '未提供'}；狀態=${t.status || '未提供'}；進度=${progress}；延遲原因=${t.delayReason || '無'}`;
                     }).join('\n');
                     setFilteredData(dataStr);
                 }
@@ -700,15 +715,29 @@
 
             if (!isOpen) return null;
 
-            const dataCount = Array.isArray(rawData) ? (startDate || endDate ?
-                rawData.filter(item => {
-                    const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
-                    if (!itemDate) return false;
-                    const d = new Date(itemDate);
-                    if (startDate && d < new Date(startDate)) return false;
-                    if (endDate && d > new Date(endDate)) return false;
-                    return true;
-                }).length : rawData.length) : 0;
+            // 計算篩選後的資料數量
+            const dataCount = useMemo(() => {
+                if (!Array.isArray(rawData)) return 0;
+                if (!startDate && !endDate) return rawData.length;
+
+                if (dataType === 'meetings') {
+                    // 會議記錄：按會議日期篩選
+                    return rawData.filter(item => {
+                        const itemDate = item.date;
+                        if (!itemDate) return false;
+                        const d = new Date(itemDate);
+                        if (startDate && d < new Date(startDate)) return false;
+                        if (endDate && d > new Date(endDate)) return false;
+                        return true;
+                    }).length;
+                } else {
+                    // 工作任務：根據進展欄位內的日期篩選
+                    return rawData.filter(t => {
+                        const filteredProgress = extractProgressByDateRange(t.progress, startDate, endDate);
+                        return filteredProgress && filteredProgress.trim() !== '';
+                    }).length;
+                }
+            }, [rawData, startDate, endDate, dataType]);
 
             return (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
