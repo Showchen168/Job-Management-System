@@ -1,23 +1,31 @@
+# -*- coding: utf-8 -*-
+"""
+Job Management System - 通知服務
+版本: v2.8.4
+"""
 from datetime import date
 import re
 import sys
 
-APP_VERSION = "v2.6.2"  # Updated version
-ON_GOING_KEYWORDS = ("on-going", "ongoing", "閫茶")
+APP_VERSION = "v2.8.4"
+ON_GOING_KEYWORDS = ("on-going", "ongoing", "進行")
 NOTIFICATION_EMAIL_DOMAIN = "@aivres.com"
 
 
 def get_version():
+    """取得應用程式版本"""
     return APP_VERSION
 
 
 def validate_version(version):
-    if not re.fullmatch(r"v\d+\.\d+\.[0-9]", version):
-        raise ValueError("鐗堟湰鏍煎紡涓嶆纰?)
+    """驗證版本格式 (vX.X.X)"""
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
+        raise ValueError("版本格式不正確")
     return True
 
 
 def is_on_going(status):
+    """檢查任務狀態是否為進行中"""
     if not status:
         return False
     normalized = status.strip().lower()
@@ -25,6 +33,7 @@ def is_on_going(status):
 
 
 def extract_email_prefix(value):
+    """從 Email 或帳號中提取前綴"""
     if not value:
         return None
     if "@" in value:
@@ -36,6 +45,7 @@ def extract_email_prefix(value):
 
 
 def resolve_assignee_email(assignee, user_emails):
+    """解析負責人 Email"""
     assignee_prefix = extract_email_prefix(assignee)
     if not assignee_prefix:
         return None
@@ -48,6 +58,7 @@ def resolve_assignee_email(assignee, user_emails):
 
 
 def build_on_going_notifications(tasks, user_emails):
+    """建立 On-going 通知清單"""
     notifications = {}
     for task in tasks:
         if not is_on_going(task.get("status")):
@@ -60,22 +71,24 @@ def build_on_going_notifications(tasks, user_emails):
 
 
 def format_notification_email(assignee_email, tasks, notify_date):
+    """格式化通知郵件內容"""
     display_date = notify_date.isoformat()
-    subject = f"寰呰睛鏇存柊鎻愰啋 ({display_date})"
+    subject = f"待辦更新提醒 ({display_date})"
     lines = [
-        f"鎮ㄥソ锛屼互涓嬬偤 {display_date} 浠嶅湪铏曠悊涓殑寰呰睛浜嬮爡锛岃珛鍗斿姪鏇存柊閫插害锛?,
+        f"您好，以下為 {display_date} 仍在處理中的待辦事項，請協助更新進度：",
         "",
     ]
     for task in tasks:
-        title = task.get("title", "鏈懡鍚嶄簨闋?)
-        due_date = task.get("dueDate") or "鏈ō瀹?
-        lines.append(f"- {title}锛堥爯瑷堝畬鎴愶細{due_date}锛?)
+        title = task.get("title", "未命名事項")
+        due_date = task.get("dueDate") or "未設定"
+        lines.append(f"- {title}（預計完成：{due_date}）")
     lines.append("")
-    lines.append("姝ら兊浠剁偤绯荤当 On-going 閫氱煡锛屽鏈夋洿鏂拌珛鑷崇郴绲卞～瀵€?)
+    lines.append("此郵件為系統 On-going 通知，如有更新請至系統填寫。")
     return subject, "\n".join(lines)
 
 
 def prepare_notification_payloads(tasks, user_emails, notify_date=None):
+    """準備通知郵件內容"""
     notify_date = notify_date or date.today()
     notifications = build_on_going_notifications(tasks, user_emails)
     payloads = []
@@ -86,8 +99,8 @@ def prepare_notification_payloads(tasks, user_emails, notify_date=None):
 
 
 if __name__ == "__main__":
-    # 1. 椹楄瓑鐗堟湰
+    # 驗證版本
     validate_version(APP_VERSION)
     print(f"Starting Notification Service {APP_VERSION}...")
-    print("姣忔棩鎻愰啋鍔熻兘宸茬Щ闄わ紝璜嬫敼鐢ㄧ郴绲卞収鎵嬪嫊鐧奸€?On-going 閫氱煡銆?)
+    print("每日提醒功能已移除，請改用系統內手動觸發 On-going 通知。")
     sys.exit(0)
