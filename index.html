@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.7.0</title>
+    <title>工作紀錄中心 v2.8.0</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.7.0"; // 多重篩選器, AI對話+日期範圍+Markdown, 編輯者可改下拉選單, AI使用權限管理
+        const APP_VERSION = "v2.8.0"; // AI總結進展日期篩選, Team管理功能, Leader可查看成員待辦
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -142,6 +142,24 @@
             return cloudAIUsers.includes(user.email);
         };
 
+        // 檢查使用者是否為任一 Team 的 Leader
+        const checkIsLeader = (user, teams = []) => {
+            if (!user || !user.email) return false;
+            return teams.some(team => team.leaderId === user.email);
+        };
+
+        // 取得 Leader 所管理的所有成員 email
+        const getLeaderTeamMembers = (user, teams = []) => {
+            if (!user || !user.email) return [];
+            const memberEmails = new Set();
+            teams.forEach(team => {
+                if (team.leaderId === user.email) {
+                    team.members.forEach(m => memberEmails.add(m));
+                }
+            });
+            return Array.from(memberEmails);
+        };
+
         const formatEmailPrefix = (email) => {
             if (!email) return '使用者';
             const [prefix] = email.split('@');
@@ -149,6 +167,39 @@
         };
 
         // --- Helper Functions ---
+
+        // 從進展文字中提取指定日期範圍的內容
+        // 規則：有日期的行需在範圍內，沒有日期的行全部保留
+        const extractProgressByDateRange = (progressText, startDate, endDate) => {
+            if (!progressText || (!startDate && !endDate)) return progressText;
+
+            // 日期正則：支援 M/D, MM/DD, YYYY/M/D, M-D, MM-DD, YYYY-M-D（行首）
+            const datePattern = /^(\d{4}[-\/])?(\d{1,2})[-\/](\d{1,2})/;
+
+            const lines = progressText.split('\n');
+            const currentYear = new Date().getFullYear();
+            const start = startDate ? new Date(startDate) : null;
+            const end = endDate ? new Date(endDate) : null;
+            // 將 end 設為當天結束時間
+            if (end) end.setHours(23, 59, 59, 999);
+
+            const filteredLines = lines.filter(line => {
+                const match = line.trim().match(datePattern);
+                if (!match) return true; // 沒有日期的行全部保留
+
+                const year = match[1] ? parseInt(match[1].replace(/[-\/]$/, '')) : currentYear;
+                const month = parseInt(match[2]) - 1;
+                const day = parseInt(match[3]);
+                const lineDate = new Date(year, month, day);
+
+                if (start && lineDate < start) return false;
+                if (end && lineDate > end) return false;
+                return true;
+            });
+
+            return filteredLines.join('\n');
+        };
+
         const callGeminiAI = async (contentParts, apiKey) => {
             if (!apiKey) {
                 throw new Error("尚未設定 Gemini API Key，請至系統設定填寫。");
@@ -584,7 +635,9 @@
                 } else {
                     const dataStr = filtered.map((t, index) => {
                         const assignee = t.assignee || t.createdByEmail || 'Unknown';
-                        return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${t.source || '未提供'}；交辦日=${t.assignedDate || '未提供'}；截止日=${t.dueDate || '未提供'}；狀態=${t.status || '未提供'}；進度=${t.progress || '未提供'}；延遲原因=${t.delayReason || '無'}`;
+                        // 從進展中提取日期範圍內的內容
+                        const filteredProgress = extractProgressByDateRange(t.progress, startDate, endDate) || '未提供';
+                        return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${t.source || '未提供'}；交辦日=${t.assignedDate || '未提供'}；截止日=${t.dueDate || '未提供'}；狀態=${t.status || '未提供'}；進度=${filteredProgress}；延遲原因=${t.delayReason || '無'}`;
                     }).join('\n');
                     setFilteredData(dataStr);
                 }
@@ -676,6 +729,7 @@
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
                                     <Calendar size={14} /> 日期範圍篩選
                                 </label>
+                                <p className="text-xs text-slate-500 mb-3">篩選進展欄位中指定日期範圍的內容（偵測進展文字中的日期格式，如 1/5、2025/1/12）</p>
                                 <div className="flex flex-wrap gap-3 items-center">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-slate-600">從</span>
@@ -1249,7 +1303,7 @@
             );
         };
 
-        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, canUseAI }) => {
+        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, canUseAI, teams = [] }) => {
             const [tasks, setTasks] = useState([]);
             const [filteredTasks, setFilteredTasks] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1266,19 +1320,41 @@
             const [filterAssignee, setFilterAssignee] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
             const [showAIModal, setShowAIModal] = useState(false);
-            
+
+            // Leader 相關狀態
+            const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
+            const teamMemberEmails = useMemo(() => getLeaderTeamMembers(user, teams), [user, teams]);
+
             useEffect(() => {
                 if (!db || !user) return;
-                const q = canAccessAll 
+
+                // Admin/Editor 看全部，Leader 需要跨用戶查詢，一般用戶看自己
+                const needsGlobalQuery = canAccessAll || (isLeader && teamMemberEmails.length > 0);
+                const q = needsGlobalQuery
                     ? query(collectionGroup(db, 'tasks'))
                     : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
+
                 const unsubscribe = onSnapshot(q, (snapshot) => {
-                const data = snapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
-                data.sort((a, b) => { const ta = a.createdAt?.seconds || 0; const tb = b.createdAt?.seconds || 0; return tb - ta; });
-                setTasks(data);
+                    let data = snapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
+
+                    // 非管理員/編輯者需要篩選
+                    if (!canAccessAll) {
+                        if (isLeader && teamMemberEmails.length > 0) {
+                            // Leader: 自己的 + 成員的任務
+                            data = data.filter(task =>
+                                task.createdByEmail === user.email ||
+                                teamMemberEmails.includes(task.createdByEmail) ||
+                                teamMemberEmails.map(e => formatEmailPrefix(e)).includes(task.assignee)
+                            );
+                        }
+                        // 一般用戶已經只查詢自己的 collection，不需要額外篩選
+                    }
+
+                    data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    setTasks(data);
                 }, (error) => console.error("Error tasks:", error));
                 return () => unsubscribe();
-            }, [db, user, canAccessAll]);
+            }, [db, user, canAccessAll, isLeader, teamMemberEmails]);
 
             useEffect(() => {
                 if (!db) return;
@@ -1526,7 +1602,7 @@
             );
         };
 
-        const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiKey, testConfig, geminiApiKey }) => {
+        const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiKey, testConfig, geminiApiKey, teams = [] }) => {
             const [newCategory, setNewCategory] = useState('');
             const [categories, setCategories] = useState([]);
             const [newTaskSource, setNewTaskSource] = useState('');
@@ -1536,8 +1612,12 @@
             const [newAdminEmail, setNewAdminEmail] = useState('');
             const [newEditorEmail, setNewEditorEmail] = useState('');
             const [newAIUserEmail, setNewAIUserEmail] = useState('');
+            const [newTeamName, setNewTeamName] = useState('');
+            const [newTeamLeader, setNewTeamLeader] = useState('');
+            const [newTeamMembers, setNewTeamMembers] = useState('');
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const canEditDropdowns = isAdmin || isEditor;
+            const canEditTeams = isAdmin || isEditor;
             const [allUsers, setAllUsers] = useState([]);
             const [isUserListLoading, setIsUserListLoading] = useState(false);
             const [userListError, setUserListError] = useState('');
@@ -1737,6 +1817,53 @@
                 const aiUsersRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'aiUsers');
                 try { const snapshot = await getDoc(aiUsersRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(aiUsersRef, { list: updatedList }, { merge: true }); } }
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            // 團隊管理
+            const handleAddTeam = async () => {
+                if (!newTeamName.trim() || !newTeamLeader.trim()) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請填寫團隊名稱和 Leader", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                const normalizedLeader = normalizePermissionEmail(newTeamLeader);
+                const memberList = newTeamMembers
+                    .split(',')
+                    .map(m => normalizePermissionEmail(m.trim()))
+                    .filter(Boolean);
+
+                const newTeam = {
+                    id: `team-${Date.now()}`,
+                    name: newTeamName.trim(),
+                    leaderId: normalizedLeader,
+                    members: memberList
+                };
+
+                try {
+                    const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+                    await setDoc(teamsRef, { list: arrayUnion(newTeam) }, { merge: true });
+                    setNewTeamName('');
+                    setNewTeamLeader('');
+                    setNewTeamMembers('');
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已建立團隊「${newTeam.name}」`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "建立失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
+            };
+            const confirmDeleteTeam = (teamId, teamName) => {
+                setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: `確定要刪除團隊「${teamName}」？`, onConfirm: () => executeDeleteTeam(teamId), onCancel: () => setModalConfig({ isOpen: false }) });
+            };
+            const executeDeleteTeam = async (teamId) => {
+                setModalConfig({ isOpen: false });
+                const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+                try {
+                    const snapshot = await getDoc(teamsRef);
+                    if (snapshot.exists()) {
+                        const updatedList = (snapshot.data().list || []).filter(t => t.id !== teamId);
+                        await setDoc(teamsRef, { list: updatedList }, { merge: true });
+                    }
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "刪除失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
             };
 
             const handleEmailServiceChange = (field, value) => {
@@ -2140,6 +2267,46 @@
                         </div>
                     )}
 
+                    {/* Team Management Panel */}
+                    {canEditTeams && (
+                        <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div>
+                                <div><h2 className="text-xl font-bold text-teal-900">團隊管理</h2><p className="text-sm text-teal-700">設定團隊讓 Leader 可查看成員待辦事項</p></div>
+                            </div>
+                            <div className="bg-white p-4 rounded-lg border border-teal-200 mb-4">
+                                <h3 className="font-bold text-slate-700 mb-3">新增團隊</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                                    <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="團隊名稱" className="p-2 border border-teal-300 rounded-lg text-sm" />
+                                    <input value={newTeamLeader} onChange={(e) => setNewTeamLeader(e.target.value)} onBlur={() => setNewTeamLeader(normalizePermissionEmail(newTeamLeader))} placeholder="Leader 帳號" className="p-2 border border-teal-300 rounded-lg text-sm" />
+                                    <input value={newTeamMembers} onChange={(e) => setNewTeamMembers(e.target.value)} placeholder="成員帳號 (逗號分隔)" className="p-2 border border-teal-300 rounded-lg text-sm" />
+                                </div>
+                                <p className="text-xs text-teal-600 mb-3">僅需輸入帳號，系統會自動補上 {AIVRES_EMAIL_DOMAIN}</p>
+                                <button onClick={handleAddTeam} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm">建立團隊</button>
+                            </div>
+                            <div className="space-y-3">
+                                {(!teams || teams.length === 0) ? (
+                                    <p className="text-sm text-slate-400">尚無團隊</p>
+                                ) : teams.map(team => (
+                                    <div key={team.id} className="bg-white p-4 rounded-lg border border-teal-200">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800">{team.name}</h4>
+                                                <p className="text-xs text-teal-600">Leader: {formatEmailPrefix(team.leaderId)}</p>
+                                            </div>
+                                            <button onClick={() => confirmDeleteTeam(team.id, team.name)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                            {team.members && team.members.length > 0 ? team.members.map(m => (
+                                                <span key={m} className="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-full">{formatEmailPrefix(m)}</span>
+                                            )) : <span className="text-xs text-slate-400">尚無成員</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Global Options: Meeting Categories */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
                         <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-emerald-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
@@ -2178,6 +2345,7 @@
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
             const [cloudAIUsers, setCloudAIUsers] = useState([]);
+            const [teams, setTeams] = useState([]);
             const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
             const [geminiApiKey, setGeminiApiKey] = useState('');
             const localeConvertersRef = useRef(null);
@@ -2322,6 +2490,19 @@
                         setCloudAIUsers(docSnap.data().list);
                     } else {
                         setCloudAIUsers([]);
+                    }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
+                if (!db) return;
+                const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+                const unsubscribe = onSnapshot(teamsRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().list) {
+                        setTeams(docSnap.data().list);
+                    } else {
+                        setTeams([]);
                     }
                 });
                 return () => unsubscribe();
@@ -2494,12 +2675,13 @@
                                 testConfig={testConfig}
                                 geminiApiKey={geminiApiKey}
                                 canUseAI={isUserCanUseAI}
+                                teams={teams}
                             />
                         )}
                         {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} />}
                         {activeTab === 'settings' && (
                             (isUserAdmin || isUserEditor) ? (
-                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} />
+                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} teams={teams} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                     <ShieldAlert size={48} className="mb-4" />
