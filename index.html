@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.8.3</title>
+    <title>工作紀錄中心 v2.8.4</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.8.3"; // 周報提示詞自動帶入日期範圍
+        const APP_VERSION = "v2.8.4"; // 修正日期過濾邏輯：檢測行內任意位置的日期
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -169,12 +169,13 @@
         // --- Helper Functions ---
 
         // 從進展文字中提取指定日期範圍的內容
-        // 規則：有日期的行需在範圍內，沒有日期的行全部保留
+        // 規則：檢測行內任意位置的日期，只保留日期在範圍內的行或無日期的行
         const extractProgressByDateRange = (progressText, startDate, endDate) => {
             if (!progressText || (!startDate && !endDate)) return progressText;
 
-            // 日期正則：支援 M/D, MM/DD, YYYY/M/D, M-D, MM-DD, YYYY-M-D（行首）
-            const datePattern = /^(\d{4}[-\/])?(\d{1,2})[-\/](\d{1,2})/;
+            // 日期正則：支援行內任意位置的日期格式
+            // M/D, MM/DD, YYYY/M/D, M-D, MM-DD, YYYY-M-D
+            const datePatternGlobal = /(?:^|[^\d])(\d{4}[-\/])?(\d{1,2})[-\/](\d{1,2})(?=[^\d]|$)/g;
 
             const lines = progressText.split('\n');
             const currentYear = new Date().getFullYear();
@@ -184,17 +185,28 @@
             if (end) end.setHours(23, 59, 59, 999);
 
             const filteredLines = lines.filter(line => {
-                const match = line.trim().match(datePattern);
-                if (!match) return true; // 沒有日期的行全部保留
+                const trimmedLine = line.trim();
+                if (!trimmedLine) return true; // 空行保留
 
-                const year = match[1] ? parseInt(match[1].replace(/[-\/]$/, '')) : currentYear;
-                const month = parseInt(match[2]) - 1;
-                const day = parseInt(match[3]);
-                const lineDate = new Date(year, month, day);
+                // 找出行內所有日期
+                const matches = [...trimmedLine.matchAll(datePatternGlobal)];
 
-                if (start && lineDate < start) return false;
-                if (end && lineDate > end) return false;
-                return true;
+                // 沒有任何日期的行保留
+                if (matches.length === 0) return true;
+
+                // 檢查所有找到的日期，至少有一個在範圍內就保留
+                for (const match of matches) {
+                    const year = match[1] ? parseInt(match[1].replace(/[-\/]$/, '')) : currentYear;
+                    const month = parseInt(match[2]) - 1;
+                    const day = parseInt(match[3]);
+                    const lineDate = new Date(year, month, day);
+
+                    const inRange = (!start || lineDate >= start) && (!end || lineDate <= end);
+                    if (inRange) return true;
+                }
+
+                // 所有日期都不在範圍內，過濾掉
+                return false;
             });
 
             return filteredLines.join('\n');
