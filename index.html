@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.6.2</title>
+    <title>工作紀錄中心 v2.7.0</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,6 +14,9 @@
 
     <!-- 3. 引入 OpenCC (繁簡轉換) -->
     <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
+
+    <!-- 4. 引入 Marked (Markdown 渲染器) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <!-- 設定 Tailwind -->
     <script>
@@ -102,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.6.2"; // AI對話式總結+Word下載, 匯出全欄位
+        const APP_VERSION = "v2.7.0"; // 多重篩選器, AI對話+日期範圍+Markdown, 編輯者可改下拉選單, AI使用權限管理
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -132,6 +135,11 @@
         const checkIsEditor = (user, cloudEditors = []) => {
             if (!user || !user.email) return false;
             return cloudEditors.includes(user.email);
+        };
+
+        const checkCanUseAI = (user, cloudAIUsers = []) => {
+            if (!user || !user.email) return false;
+            return cloudAIUsers.includes(user.email);
         };
 
         const formatEmailPrefix = (email) => {
@@ -462,8 +470,9 @@
             );
         };
 
-        // 下載 Word 文件功能
-        const downloadAsWord = (content, filename = 'AI_Report') => {
+        // 下載 Word 文件功能 (支援 HTML 內容)
+        const downloadAsWord = (content, filename = 'AI_Report', isHtml = false) => {
+            const bodyContent = isHtml ? content : `<div style="white-space: pre-wrap;">${content.replace(/\n/g, '<br>')}</div>`;
             const htmlContent = `
                 <!DOCTYPE html>
                 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -471,14 +480,25 @@
                     <meta charset="utf-8">
                     <title>${filename}</title>
                     <style>
-                        body { font-family: '微軟正黑體', 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; padding: 20px; }
-                        h1, h2, h3 { color: #333; }
+                        body { font-family: '微軟正黑體', 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.8; padding: 30px; color: #333; }
+                        h1 { font-size: 24px; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 10px; margin-top: 20px; }
+                        h2 { font-size: 20px; color: #1e3a8a; margin-top: 18px; }
+                        h3 { font-size: 16px; color: #374151; margin-top: 14px; }
                         p { margin: 10px 0; }
-                        pre { background: #f5f5f5; padding: 10px; white-space: pre-wrap; }
+                        ul, ol { margin: 10px 0; padding-left: 25px; }
+                        li { margin: 5px 0; }
+                        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+                        th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+                        th { background-color: #f3f4f6; font-weight: bold; }
+                        blockquote { border-left: 4px solid #6366f1; padding-left: 15px; margin: 10px 0; color: #4b5563; background: #f9fafb; padding: 10px 15px; }
+                        code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+                        pre { background: #f3f4f6; padding: 15px; border-radius: 8px; overflow-x: auto; }
+                        strong { color: #1f2937; }
+                        hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
                     </style>
                 </head>
                 <body>
-                    <div style="white-space: pre-wrap;">${content.replace(/\n/g, '<br>')}</div>
+                    ${bodyContent}
                 </body>
                 </html>
             `;
@@ -493,19 +513,82 @@
             URL.revokeObjectURL(url);
         };
 
-        // AI 對話 Modal 組件
-        const AIConversationModal = ({ isOpen, onClose, taskData, geminiApiKey }) => {
+        // Markdown 渲染組件
+        const MarkdownRenderer = ({ content }) => {
+            const htmlContent = useMemo(() => {
+                if (!content) return '';
+                try {
+                    return marked.parse(content);
+                } catch (e) {
+                    return content;
+                }
+            }, [content]);
+
+            return (
+                <div
+                    className="prose prose-sm prose-slate max-w-none prose-headings:text-slate-800 prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-table:text-sm prose-th:bg-slate-100 prose-th:p-2 prose-td:p-2 prose-td:border prose-th:border"
+                    dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+            );
+        };
+
+        // AI 對話 Modal 組件 (增強版 - 支援日期篩選和 Markdown 渲染)
+        const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, dataType = 'tasks', onDateFilter }) => {
             const [userPrompt, setUserPrompt] = useState('');
             const [aiResponse, setAiResponse] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [error, setError] = useState('');
+            const [startDate, setStartDate] = useState('');
+            const [endDate, setEndDate] = useState('');
+            const [filteredData, setFilteredData] = useState('');
 
-            const defaultPrompts = [
-                { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告，包含核心成果、進行中工作、風險與阻礙、下階段計劃。' },
-                { label: '會議報告', prompt: '請將以下工作內容整理成適合在會議中報告的格式，重點突出、簡潔明瞭。' },
-                { label: '郵件摘要', prompt: '請將以下工作內容整理成適合發送給主管的工作更新郵件內容，語氣專業且簡潔。' },
-                { label: '風險分析', prompt: '請分析以下工作內容中的風險和問題，並提供建議的解決方案。' }
+            // 根據資料類型設定不同的預設提示詞
+            const defaultPrompts = dataType === 'meetings' ? [
+                { label: '會議摘要', prompt: '請根據以下會議記錄，整理出一份專業的會議紀要，包含執行摘要、重點議題討論、關鍵決策、待辦事項。請使用 Markdown 格式輸出。' },
+                { label: '行動項目', prompt: '請從以下會議記錄中提取所有待辦事項和行動項目，列出負責人和截止日期。請使用 Markdown 表格格式輸出。' },
+                { label: '決策總結', prompt: '請從以下會議記錄中總結所有重要決策和結論。請使用 Markdown 格式輸出。' },
+                { label: '報告格式', prompt: '請將以下會議記錄整理成適合發送給主管的報告格式，語氣專業且簡潔。請使用 Markdown 格式輸出。' }
+            ] : [
+                { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告，包含核心成果、進行中工作、風險與阻礙、下階段計劃。請使用 Markdown 格式輸出，包含適當的標題和條列。' },
+                { label: '會議報告', prompt: '請將以下工作內容整理成適合在會議中報告的格式，重點突出、簡潔明瞭。請使用 Markdown 格式輸出。' },
+                { label: '郵件摘要', prompt: '請將以下工作內容整理成適合發送給主管的工作更新郵件內容，語氣專業且簡潔。請使用 Markdown 格式輸出。' },
+                { label: '風險分析', prompt: '請分析以下工作內容中的風險和問題，並提供建議的解決方案。請使用 Markdown 格式輸出，使用表格呈現風險評估。' }
             ];
+
+            // 日期篩選邏輯
+            useEffect(() => {
+                if (!rawData || !Array.isArray(rawData)) {
+                    setFilteredData(typeof rawData === 'string' ? rawData : '');
+                    return;
+                }
+
+                let filtered = rawData;
+                if (startDate || endDate) {
+                    filtered = rawData.filter(item => {
+                        const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
+                        if (!itemDate) return false;
+                        const d = new Date(itemDate);
+                        if (startDate && d < new Date(startDate)) return false;
+                        if (endDate && d > new Date(endDate)) return false;
+                        return true;
+                    });
+                }
+
+                // 格式化資料為文字
+                if (dataType === 'meetings') {
+                    const dataStr = filtered.map((m, index) => {
+                        const content = m.content ? m.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '無內容';
+                        return `會議${index + 1}：主題=${m.topic}；日期=${m.date}；主持人=${m.host}；分類=${m.category || '未分類'}；參會人員=${m.attendees || '未記錄'}；內容=${content.substring(0, 500)}`;
+                    }).join('\n');
+                    setFilteredData(dataStr);
+                } else {
+                    const dataStr = filtered.map((t, index) => {
+                        const assignee = t.assignee || t.createdByEmail || 'Unknown';
+                        return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${t.source || '未提供'}；交辦日=${t.assignedDate || '未提供'}；截止日=${t.dueDate || '未提供'}；狀態=${t.status || '未提供'}；進度=${t.progress || '未提供'}；延遲原因=${t.delayReason || '無'}`;
+                    }).join('\n');
+                    setFilteredData(dataStr);
+                }
+            }, [rawData, startDate, endDate, dataType]);
 
             const handleSubmit = async () => {
                 if (!userPrompt.trim()) {
@@ -516,6 +599,10 @@
                     setError('尚未設定 Gemini API Key，請至系統設定填寫。');
                     return;
                 }
+                if (!filteredData.trim()) {
+                    setError('篩選後無資料可供分析，請調整日期範圍。');
+                    return;
+                }
                 setIsLoading(true);
                 setError('');
                 setAiResponse('');
@@ -524,14 +611,17 @@
                     "### 用戶指令",
                     userPrompt,
                     "",
-                    "### 工作資料",
-                    taskData
+                    "### 重要提示",
+                    "請務必使用 Markdown 格式輸出，包含適當的標題(#, ##, ###)、條列(-, *)、表格、粗體(**text**)等格式，使報告結構清晰、易於閱讀。",
+                    "",
+                    dataType === 'meetings' ? "### 會議資料" : "### 工作資料",
+                    filteredData
                 ].join('\n');
 
                 try {
                     const resultRaw = await callGeminiAI([{ text: fullPrompt }], geminiApiKey);
-                    const result = cleanAIResponse(resultRaw);
-                    setAiResponse(result);
+                    // 不使用 cleanAIResponse，保留 Markdown 格式
+                    setAiResponse(resultRaw);
                 } catch (e) {
                     setError(e.message || '生成失敗，請稍後再試');
                 }
@@ -540,23 +630,83 @@
 
             const handleDownloadWord = () => {
                 if (aiResponse) {
-                    downloadAsWord(aiResponse, 'AI_工作報告');
+                    // 將 Markdown 轉換為 HTML 後再下載
+                    const htmlContent = marked.parse(aiResponse);
+                    downloadAsWord(htmlContent, dataType === 'meetings' ? 'AI_會議報告' : 'AI_工作報告', true);
                 }
+            };
+
+            const handleClose = () => {
+                setUserPrompt('');
+                setAiResponse('');
+                setError('');
+                setStartDate('');
+                setEndDate('');
+                onClose();
             };
 
             if (!isOpen) return null;
 
+            const dataCount = Array.isArray(rawData) ? (startDate || endDate ?
+                rawData.filter(item => {
+                    const itemDate = dataType === 'meetings' ? item.date : (item.assignedDate || item.dueDate);
+                    if (!itemDate) return false;
+                    const d = new Date(itemDate);
+                    if (startDate && d < new Date(startDate)) return false;
+                    if (endDate && d > new Date(endDate)) return false;
+                    return true;
+                }).length : rawData.length) : 0;
+
             return (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden transform scale-100 transition-all flex flex-col max-h-[90vh]">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden transform scale-100 transition-all flex flex-col max-h-[90vh]">
                         <div className="p-6 flex-shrink-0 border-b border-slate-100">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-purple-100 rounded-full text-purple-600"><Bot size={24} /></div>
-                                <h3 className="text-lg font-bold text-slate-800">AI 智能對話總結</h3>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800">AI 智能對話總結</h3>
+                                    <p className="text-xs text-slate-500">{dataType === 'meetings' ? '會議記錄分析' : '工作待辦分析'}</p>
+                                </div>
                             </div>
                         </div>
 
                         <div className="p-6 overflow-y-auto flex-1">
+                            {/* 日期範圍篩選 */}
+                            <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
+                                    <Calendar size={14} /> 日期範圍篩選
+                                </label>
+                                <div className="flex flex-wrap gap-3 items-center">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-slate-600">從</span>
+                                        <input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-slate-600">至</span>
+                                        <input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => { setStartDate(''); setEndDate(''); }}
+                                        className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                                    >
+                                        清除
+                                    </button>
+                                    <span className="text-sm text-slate-500 ml-auto">
+                                        已選取 <span className="font-bold text-purple-600">{dataCount}</span> 筆資料
+                                    </span>
+                                </div>
+                            </div>
+
                             {/* 快速選擇提示詞 */}
                             <div className="mb-4">
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">快速選擇提示詞</label>
@@ -579,8 +729,8 @@
                                 <textarea
                                     value={userPrompt}
                                     onChange={(e) => setUserPrompt(e.target.value)}
-                                    placeholder="請輸入您希望 AI 如何處理工作資料的指令..."
-                                    className="w-full p-3 border border-slate-300 rounded-lg min-h-[100px] focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    placeholder="請輸入您希望 AI 如何處理資料的指令..."
+                                    className="w-full p-3 border border-slate-300 rounded-lg min-h-[80px] focus:outline-none focus:ring-2 focus:ring-purple-500"
                                 />
                             </div>
 
@@ -595,7 +745,7 @@
                             <div className="mb-4">
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={isLoading}
+                                    disabled={isLoading || dataCount === 0}
                                     className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? (
@@ -612,12 +762,12 @@
                                 </button>
                             </div>
 
-                            {/* AI 回應 */}
+                            {/* AI 回應 - Markdown 渲染 */}
                             {aiResponse && (
                                 <div className="mt-4">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">AI 回應</label>
-                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[40vh] overflow-y-auto">
-                                        {aiResponse}
+                                    <div className="bg-white p-4 rounded-lg border border-slate-200 max-h-[40vh] overflow-y-auto">
+                                        <MarkdownRenderer content={aiResponse} />
                                     </div>
                                     <div className="flex gap-3 mt-3">
                                         <CopyButton text={aiResponse} />
@@ -635,7 +785,7 @@
 
                         <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100 flex-shrink-0">
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition"
                             >
                                 關閉
@@ -1099,7 +1249,7 @@
             );
         };
 
-        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey }) => {
+        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, canUseAI }) => {
             const [tasks, setTasks] = useState([]);
             const [filteredTasks, setFilteredTasks] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1112,9 +1262,10 @@
             const [aiLoading, setAiLoading] = useState(false);
             const [aiReport, setAiReport] = useState('');
             const [filterStatus, setFilterStatus] = useState('All');
+            const [filterSource, setFilterSource] = useState('All');
+            const [filterAssignee, setFilterAssignee] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
             const [showAIModal, setShowAIModal] = useState(false);
-            const [aiTaskData, setAiTaskData] = useState('');
             
             useEffect(() => {
                 if (!db || !user) return;
@@ -1171,27 +1322,17 @@
             useEffect(() => {
                 let res = tasks;
                 if (filterStatus !== 'All') { res = res.filter(t => t.status === filterStatus); }
+                if (filterSource !== 'All') { res = res.filter(t => t.source === filterSource); }
+                if (filterAssignee !== 'All') { res = res.filter(t => t.assignee === filterAssignee || formatEmailPrefix(t.createdByEmail) === filterAssignee); }
                 if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(t => t.title.toLowerCase().includes(lowerQ) || (t.assignee && t.assignee.toLowerCase().includes(lowerQ)) || (t.createdByEmail && t.createdByEmail.toLowerCase().includes(lowerQ))); }
                 setFilteredTasks(res);
-            }, [tasks, filterStatus, searchQuery]);
+            }, [tasks, filterStatus, filterSource, filterAssignee, searchQuery]);
 
             const handleGenerateReport = () => {
                 if (!filteredTasks.length) {
                     setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
                     return;
                 }
-                // 準備任務資料給 AI 對話
-                const taskDataStr = filteredTasks.map((t, index) => {
-                    const assignee = t.assignee || t.createdByEmail || 'Unknown';
-                    const dueDate = t.dueDate || '未提供';
-                    const assignedDate = t.assignedDate || '未提供';
-                    const status = t.status || '未提供';
-                    const progress = t.progress || '未提供';
-                    const source = t.source || '未提供';
-                    const delayReason = t.delayReason || '無';
-                    return `項目${index + 1}：事項=${t.title}；負責人=${assignee}；來源=${source}；交辦日=${assignedDate}；截止日=${dueDate}；狀態=${status}；進度=${progress}；延遲原因=${delayReason}`;
-                }).join('\n');
-                setAiTaskData(taskDataStr);
                 setShowAIModal(true);
             };
 
@@ -1244,15 +1385,18 @@
                 <AIConversationModal
                     isOpen={showAIModal}
                     onClose={() => setShowAIModal(false)}
-                    taskData={aiTaskData}
+                    rawData={filteredTasks}
                     geminiApiKey={geminiApiKey}
+                    dataType="tasks"
                 />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-full sm:w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                        {isAdmin && <button onClick={handleGenerateReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
+                        <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                        <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{assigneeOptions.map(a => <option key={a} value={a}>{a}</option>)}</select>
+                        {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                         <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm w-full sm:w-auto"><Download size={18} /> 匯出</button>
                         <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
                     </div>
@@ -1284,7 +1428,7 @@
             );
         };
 
-        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey }) => {
+        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey, canUseAI }) => {
             const [meetings, setMeetings] = useState([]);
             const [filteredMeetings, setFilteredMeetings] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1294,6 +1438,7 @@
             const [aiLoading, setAiLoading] = useState(false);
             const [filterCategory, setFilterCategory] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
+            const [showAIModal, setShowAIModal] = useState(false);
 
             useEffect(() => {
                 if (!db || !user) return;
@@ -1324,77 +1469,12 @@
                 setFilteredMeetings(res);
             }, [meetings, filterCategory, searchQuery]);
 
-            const handleGenerateMeetingReport = async () => {
-                if (!filteredMeetings.length) { setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); return; }
-                setAiLoading(true);
-                setModalConfig({ isOpen: true, type: 'ai', title: 'AI 正在分析...', content: '正在閱讀記錄...', onConfirm: null, confirmText: "", onCancel: null });
-                try {
-                    const parts = [];
-                    const meetingsToAnalyze = filteredMeetings.slice(0, 5); 
-                    let promptText = [
-                        "### 角色",
-                        "你是一位擁有 10 年經驗的「資深高階行政秘書」，擅長資訊萃取、邏輯歸納與商務溝通。你具備將零散、口語化的會議對話轉化為條理分明、具備執行力的專業會議紀錄的能力。",
-                        "",
-                        "### 任務",
-                        "請閱讀並分析提供的 [會議記錄/逐字稿/筆記]，產出一份結構化的會議紀要。你的目標是讓未參與會議的主管或同仁能在 3 分鐘內掌握會議重點與後續行動。",
-                        "",
-                        "### 情境",
-                        "- 原始資料可能包含口語贅字、離題討論或不完整的句子，你需要過濾雜訊，僅保留核心價值資訊。",
-                        "- 若會議中涉及多個議題，請依照議題進行分類歸納。",
-                        "",
-                        "### 限制條件",
-                        "- **輸出格式**：Markdown 格式（請參考下方範本）。",
-                        "- **語氣風格**：專業、客觀、簡練（Business Professional）。",
-                        "- **語言**：繁體中文（台灣慣用語）。",
-                        "- **內容處理**：",
-                        "  1. 遇到模糊不清的日期或人名，請標註「[需確認]」。",
-                        "  2. 待辦事項（Action Items）必須包含「負責人」與「預計完成時間」（若無提及則標註待定）。",
-                        "",
-                        "### 輸出範本架構",
-                        "# [會議名稱] 會議紀要",
-                        "",
-                        "**會議時間**：[YYYY/MM/DD]",
-                        "**與會人員**：[列出名單]",
-                        "",
-                        "## 1. 執行摘要 (Executive Summary)",
-                        "> 用 3-5 句話概括本次會議的核心目的與最重要結論。",
-                        "",
-                        "## 2. 重點議題討論",
-                        "* **議題一：[議題名稱]**",
-                        "    * 討論重點：...",
-                        "    * 關鍵數據/事實：...",
-                        "* **議題二：[議題名稱]**",
-                        "    * ...",
-                        "",
-                        "## 3. 關鍵決策 (Key Decisions)",
-                        "* [決策 1]",
-                        "* [決策 2]",
-                        "",
-                        "## 4. 待辦事項 (Action Items)",
-                        "| 事項描述 | 負責人 | 截止日期 |",
-                        "| :--- | :--- | :--- |",
-                        "| [具體行動] | [姓名] | [日期] |",
-                        "",
-                        "---",
-                        "",
-                        "### 原始會議內容",
-                        "請根據以下內容進行整理：",
-                        ""
-                    ].join('\n');
-                    meetingsToAnalyze.forEach((m, index) => {
-                        const { text, images } = extractContentForAI(m.content);
-                        promptText += `--- 會議 ${index + 1}: ${m.date} ${m.topic} ---\n${text}\n\n`;
-                        images.forEach(img => { parts.push(img); });
-                    });
-                    parts.unshift({ text: promptText });
-                    const resultRaw = await callGeminiAI(parts, geminiApiKey);
-                    const result = cleanAIResponse(resultRaw);
-                    setModalConfig({ 
-                        isOpen: true, type: 'ai', title: 'AI 會議智能總結', content: null, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null,
-                        children: (<div className="mt-4"><div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm whitespace-pre-wrap max-h-[60vh] overflow-y-auto">{result}</div><CopyButton text={result} /></div>)
-                    });
-                } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '生成失敗', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
-                setAiLoading(false);
+            const handleGenerateMeetingReport = () => {
+                if (!filteredMeetings.length) {
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                    return;
+                }
+                setShowAIModal(true);
             };
 
             const handleSave = async (formData) => {
@@ -1416,11 +1496,19 @@
             return (
                 <div className="space-y-6 animate-in fade-in">
                 <Modal {...modalConfig} />
+                <AIConversationModal
+                    isOpen={showAIModal}
+                    onClose={() => setShowAIModal(false)}
+                    rawData={filteredMeetings}
+                    geminiApiKey={geminiApiKey}
+                    dataType="meetings"
+                />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                        {isAdmin && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
+                        <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                        {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                         <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
                     </div>
                 </div>
@@ -1438,7 +1526,7 @@
             );
         };
 
-        const SettingsPage = ({ db, user, isAdmin, cloudAdmins, cloudEditors, rootAdmins, onSaveGeminiKey, testConfig, geminiApiKey }) => {
+        const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiKey, testConfig, geminiApiKey }) => {
             const [newCategory, setNewCategory] = useState('');
             const [categories, setCategories] = useState([]);
             const [newTaskSource, setNewTaskSource] = useState('');
@@ -1447,7 +1535,9 @@
             const [taskStatuses, setTaskStatuses] = useState([]);
             const [newAdminEmail, setNewAdminEmail] = useState('');
             const [newEditorEmail, setNewEditorEmail] = useState('');
+            const [newAIUserEmail, setNewAIUserEmail] = useState('');
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
+            const canEditDropdowns = isAdmin || isEditor;
             const [allUsers, setAllUsers] = useState([]);
             const [isUserListLoading, setIsUserListLoading] = useState(false);
             const [userListError, setUserListError] = useState('');
@@ -1629,6 +1719,23 @@
                 setModalConfig({ isOpen: false });
                 const editorsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'editors');
                 try { const snapshot = await getDoc(editorsRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(editorsRef, { list: updatedList }, { merge: true }); } }
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+
+            // AI 使用者管理
+            const handleAddAIUser = async () => {
+                const normalizedEmail = normalizePermissionEmail(newAIUserEmail);
+                if (!normalizedEmail || !normalizedEmail.includes('@')) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請輸入使用者帳號", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                const normalizedAIUsers = (cloudAIUsers || []).map((email) => email.toLowerCase());
+                if (normalizedAIUsers.includes(normalizedEmail)) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已有 AI 使用權限", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+                try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'aiUsers'), { list: arrayUnion(normalizedEmail) }, { merge: true }); setNewAIUserEmail(''); setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已授予 ${normalizedEmail} AI 使用權限`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null }); }
+                catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
+            };
+            const confirmRemoveAIUser = (emailToRemove) => { setModalConfig({ isOpen: true, type: 'danger', title: '移除權限', content: `確定要移除 ${formatEmailPrefix(emailToRemove)} 的 AI 使用權限？`, onConfirm: () => executeRemoveAIUser(emailToRemove), onCancel: () => setModalConfig({ isOpen: false }) }); };
+            const executeRemoveAIUser = async (emailToRemove) => {
+                setModalConfig({ isOpen: false });
+                const aiUsersRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'aiUsers');
+                try { const snapshot = await getDoc(aiUsersRef); if (snapshot.exists()) { const updatedList = (snapshot.data().list || []).filter(e => e !== emailToRemove); await setDoc(aiUsersRef, { list: updatedList }, { merge: true }); } }
                 catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
             };
 
@@ -1995,7 +2102,7 @@
                     {/* Editor Management Panel */}
                     {isAdmin && (
                         <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200" data-testid="editor-permission-section">
-                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料，但不可使用 AI 與系統設定</p></div></div>
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料及下拉選單設定</p></div></div>
                             <div className="flex gap-2 mb-2">
                                 <input
                                     value={newEditorEmail}
@@ -2013,25 +2120,45 @@
                         </div>
                     )}
 
+                    {/* AI User Management Panel */}
+                    {isAdmin && (
+                        <div className="bg-purple-50 p-8 rounded-xl shadow-sm border border-purple-200">
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-purple-100 rounded-full"><Bot className="text-purple-700" size={24} /></div><div><h2 className="text-xl font-bold text-purple-900">AI 使用權限管理</h2><p className="text-sm text-purple-700">授予一般使用者 AI 總結功能的使用權限</p></div></div>
+                            <div className="flex gap-2 mb-2">
+                                <input
+                                    value={newAIUserEmail}
+                                    onChange={(e) => setNewAIUserEmail(e.target.value)}
+                                    onBlur={() => setNewAIUserEmail(normalizePermissionEmail(newAIUserEmail))}
+                                    placeholder="輸入使用者帳號"
+                                    className="flex-1 p-2 border border-purple-300 rounded-lg text-sm bg-white"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddAIUser()}
+                                />
+                                <button onClick={handleAddAIUser} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm whitespace-nowrap">新增 AI 使用者</button>
+                            </div>
+                            <p className="text-xs text-purple-700 mb-6">僅需輸入帳號，系統會自動補上 {AIVRES_EMAIL_DOMAIN}</p>
+                            <div className="bg-white rounded-lg border border-purple-200 overflow-hidden"><ul className="divide-y divide-purple-100">{(!cloudAIUsers || cloudAIUsers.length === 0) ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 AI 使用者</li>) : cloudAIUsers.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><Sparkles size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAIUser(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                        </div>
+                    )}
+
                     {/* Global Options: Meeting Categories */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-emerald-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
-                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="輸入新分類名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} /><button onClick={() => handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">新增</button></div>)}
-                        <div className="flex flex-wrap gap-2">{categories.map((cat, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{cat}</span>{isAdmin && <button onClick={() => confirmDeleteItem('meetingCategories', cat, categories)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-emerald-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
+                        {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="輸入新分類名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} /><button onClick={() => handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{categories.map((cat, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{cat}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('meetingCategories', cat, categories)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
                     </div>
 
                     {/* Global Options: Task Sources */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-blue-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-blue-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦來源</h2></div></div>
-                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newTaskSource} onChange={(e) => setNewTaskSource(e.target.value)} placeholder="輸入新來源名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} /><button onClick={() => handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新增</button></div>)}
-                        <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{isAdmin && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-blue-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-blue-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦來源</h2></div></div>
+                        {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newTaskSource} onChange={(e) => setNewTaskSource(e.target.value)} placeholder="輸入新來源名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} /><button onClick={() => handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
                     </div>
 
                     {/* Global Options: Task Statuses */}
                     <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${isAdmin ? 'bg-indigo-100' : 'bg-slate-100'}`}>{isAdmin ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
-                        {isAdmin && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
-                        <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{isAdmin && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                        <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-indigo-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
+                        {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
+                        <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
                     </div>
                 </div>
             );
@@ -2050,6 +2177,7 @@
             const [isAuthChecking, setIsAuthChecking] = useState(true);
             const [cloudAdmins, setCloudAdmins] = useState([]);
             const [cloudEditors, setCloudEditors] = useState([]);
+            const [cloudAIUsers, setCloudAIUsers] = useState([]);
             const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
             const [geminiApiKey, setGeminiApiKey] = useState('');
             const localeConvertersRef = useRef(null);
@@ -2187,6 +2315,19 @@
             }, [db]);
 
             useEffect(() => {
+                if (!db) return;
+                const aiUsersRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'aiUsers');
+                const unsubscribe = onSnapshot(aiUsersRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().list) {
+                        setCloudAIUsers(docSnap.data().list);
+                    } else {
+                        setCloudAIUsers([]);
+                    }
+                });
+                return () => unsubscribe();
+            }, [db]);
+
+            useEffect(() => {
                 if (!db || testConfig.enabled) return;
                 const geminiRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'gemini');
                 const unsubscribe = onSnapshot(
@@ -2236,6 +2377,7 @@
 
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
+            const isUserCanUseAI = useMemo(() => checkCanUseAI(user, cloudAIUsers), [user, cloudAIUsers]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
             const userDisplayName = useMemo(() => formatEmailPrefix(user?.email), [user]);
             const connectionIndicatorClass = useMemo(() => {
@@ -2293,7 +2435,7 @@
                             <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
                             <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                             
-                            {isUserAdmin && (
+                            {(isUserAdmin || isUserEditor) && (
                                 <div className="pt-4 border-t border-slate-700 mt-4">
                                     <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={20} />} label="系統設定" />
                                 </div>
@@ -2351,12 +2493,13 @@
                                 isAdmin={isUserAdmin}
                                 testConfig={testConfig}
                                 geminiApiKey={geminiApiKey}
+                                canUseAI={isUserCanUseAI}
                             />
                         )}
-                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} />}
+                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} />}
                         {activeTab === 'settings' && (
-                            isUserAdmin ? (
-                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} />
+                            (isUserAdmin || isUserEditor) ? (
+                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                     <ShieldAlert size={48} className="mb-4" />
