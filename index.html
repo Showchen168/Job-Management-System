@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.4</title>
+    <title>工作紀錄中心 v2.9.5</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.4"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.5"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -2036,11 +2036,12 @@
                                     if (currentLeaders.map(l => l.toLowerCase()).includes(normalizedEmail.toLowerCase())) {
                                         throw new Error("該使用者已經是此團隊的 Leader");
                                     }
-                                    return {
+                                    const updatedTeam = {
                                         ...t,
-                                        leaderIds: [...currentLeaders, normalizedEmail],
-                                        leaderId: undefined // 移除舊格式
+                                        leaderIds: [...currentLeaders, normalizedEmail]
                                     };
+                                    delete updatedTeam.leaderId; // 移除舊格式
+                                    return updatedTeam;
                                 }
                                 return t;
                             });
