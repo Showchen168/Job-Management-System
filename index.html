@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.2</title>
+    <title>工作紀錄中心 v2.9.3</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.2"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.3"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1764,6 +1764,7 @@
             const [newAdminEmail, setNewAdminEmail] = useState('');
             const [newEditorEmail, setNewEditorEmail] = useState('');
             const [newAIUserEmail, setNewAIUserEmail] = useState('');
+            const [newLeaderEmail, setNewLeaderEmail] = useState('');
             const [newTeamName, setNewTeamName] = useState('');
             const [newTeamLeader, setNewTeamLeader] = useState('');
             const [newTeamMembers, setNewTeamMembers] = useState('');
@@ -2002,6 +2003,37 @@
                 if (await handleAddPermission('aiUsers', newAIUserEmail, cloudAIUsers || [])) setNewAIUserEmail('');
             };
             const confirmRemoveAIUser = (email) => confirmRemovePermission('aiUsers', email);
+
+            // Leader 管理（快速添加）
+            const handleAddLeader = async () => {
+                if (!newLeaderEmail) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請選擇使用者", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                const normalizedEmail = normalizePermissionEmail(newLeaderEmail);
+                // 檢查是否已經是 Leader
+                const existingLeaders = teams.map(t => t.leaderId.toLowerCase());
+                if (existingLeaders.includes(normalizedEmail.toLowerCase())) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是 Leader", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
+                // 自動建立團隊
+                const leaderName = formatEmailPrefix(normalizedEmail);
+                const newTeam = {
+                    id: `team-${Date.now()}`,
+                    name: `${leaderName} 的團隊`,
+                    leaderId: normalizedEmail,
+                    members: []
+                };
+                try {
+                    const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+                    await setDoc(teamsRef, { list: arrayUnion(newTeam) }, { merge: true });
+                    setNewLeaderEmail('');
+                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${leaderName} 設為 Leader，團隊成員可在團隊管理中編輯`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                } catch (e) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                }
+            };
 
             // 團隊管理
             const handleAddTeam = async () => {
@@ -2513,6 +2545,27 @@
                                 <button onClick={handleAddAIUser} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm whitespace-nowrap">新增 AI 使用者</button>
                             </div>
                             <div className="bg-white rounded-lg border border-purple-200 overflow-hidden"><ul className="divide-y divide-purple-100">{(!cloudAIUsers || cloudAIUsers.length === 0) ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 AI 使用者</li>) : cloudAIUsers.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><Sparkles size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAIUser(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
+                        </div>
+                    )}
+
+                    {/* Leader Management Panel */}
+                    {isAdmin && (
+                        <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div><div><h2 className="text-xl font-bold text-teal-900">Leader 管理</h2><p className="text-sm text-teal-700">快速將使用者設為團隊 Leader</p></div></div>
+                            <div className="flex gap-2 mb-6">
+                                <select
+                                    value={newLeaderEmail}
+                                    onChange={(e) => setNewLeaderEmail(e.target.value)}
+                                    className="flex-1 p-2 border border-teal-300 rounded-lg text-sm bg-white"
+                                >
+                                    <option value="">選擇使用者</option>
+                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !teams.some(t => t.leaderId.toLowerCase() === u.email.toLowerCase())).map(u => (
+                                        <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
+                                    ))}
+                                </select>
+                                <button onClick={handleAddLeader} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm whitespace-nowrap">新增 Leader</button>
+                            </div>
+                            <div className="bg-white rounded-lg border border-teal-200 overflow-hidden"><ul className="divide-y divide-teal-100">{teams.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 Leader</li>) : [...new Set(teams.map(t => t.leaderId))].map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-teal-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-teal-600">{teams.filter(t => t.leaderId === email).map(t => t.name).join(', ')}</span></li>))}</ul></div>
                         </div>
                     )}
 
