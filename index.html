@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.8.9</title>
+    <title>工作紀錄中心 v2.9.0</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.8.9"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.0"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1476,11 +1476,9 @@
             useEffect(() => {
                 if (!db || !user) return;
 
-                // Admin/Editor 看全部，Leader 需要跨用戶查詢，一般用戶看自己
-                const needsGlobalQuery = canAccessAll || (isLeader && teamMemberEmails.length > 0);
-                const q = needsGlobalQuery
-                    ? query(collectionGroup(db, 'tasks'))
-                    : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
+                // 所有用戶都使用全域查詢，以便能看到被指派的任務
+                const q = query(collectionGroup(db, 'tasks'));
+                const userEmailPrefix = formatEmailPrefix(user.email);
 
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     let data = snapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
@@ -1488,14 +1486,20 @@
                     // 非管理員/編輯者需要篩選
                     if (!canAccessAll) {
                         if (isLeader && teamMemberEmails.length > 0) {
-                            // Leader: 自己的 + 成員的任務
+                            // Leader: 自己的 + 成員的任務 + 被指派給自己的任務
                             data = data.filter(task =>
                                 task.createdByEmail === user.email ||
+                                task.assignee === userEmailPrefix ||
                                 teamMemberEmails.includes(task.createdByEmail) ||
                                 teamMemberEmails.map(e => formatEmailPrefix(e)).includes(task.assignee)
                             );
+                        } else {
+                            // 一般用戶: 自己建立的 + 被指派給自己的任務
+                            data = data.filter(task =>
+                                task.createdByEmail === user.email ||
+                                task.assignee === userEmailPrefix
+                            );
                         }
-                        // 一般用戶已經只查詢自己的 collection，不需要額外篩選
                     }
 
                     data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -1768,8 +1772,8 @@
             const [editTeamLeader, setEditTeamLeader] = useState('');
             const [editTeamMembers, setEditTeamMembers] = useState('');
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
-            const canEditDropdowns = isAdmin || isEditor;
             const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
+            const canEditDropdowns = isAdmin || isEditor || isLeader;
             const canEditTeams = isAdmin || isEditor;
             const canViewTeamPanel = isAdmin || isEditor || isLeader;
             const [allUsers, setAllUsers] = useState([]);
@@ -2314,134 +2318,138 @@
                         </div>
                     </div>
 
-                    {/* Gemini Settings */}
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="gemini-settings">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className={`p-3 rounded-full ${isAdmin ? 'bg-purple-100' : 'bg-slate-100'}`}>
-                                {isAdmin ? <Bot className="text-purple-700" size={24} /> : <Lock className="text-slate-500" size={24} />}
+                    {/* Gemini Settings - Admin Only */}
+                    {isAdmin && (
+                        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="gemini-settings">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 rounded-full bg-purple-100">
+                                    <Bot className="text-purple-700" size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Gemini API 設定</h2>
+                                    <p className="text-sm text-slate-500">提供 AI 報告與會議摘要服務</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-800">Gemini API 設定</h2>
-                                <p className="text-sm text-slate-500">提供 AI 報告與會議摘要服務</p>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gemini API Key</label>
+                                    <input
+                                        type="password"
+                                        value={geminiApiKeyInput}
+                                        onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                                        className="w-full p-2 border rounded"
+                                        placeholder="請輸入 Gemini API Key"
+                                        data-testid="gemini-api-key-input"
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={handleSaveGeminiSettings}
+                                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={(!db && !testConfig.enabled) || isGeminiSaving}
+                                        data-testid="gemini-api-key-save-button"
+                                    >
+                                        {isGeminiSaving ? '儲存中...' : '儲存 Gemini API Key'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gemini API Key</label>
-                                <input
-                                    type="password"
-                                    value={geminiApiKeyInput}
-                                    onChange={(e) => setGeminiApiKeyInput(e.target.value)}
-                                    className="w-full p-2 border rounded"
-                                    placeholder="請輸入 Gemini API Key"
-                                    data-testid="gemini-api-key-input"
-                                />
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleSaveGeminiSettings}
-                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={(!db && !testConfig.enabled) || isGeminiSaving}
-                                    data-testid="gemini-api-key-save-button"
-                                >
-                                    {isGeminiSaving ? '儲存中...' : '儲存 Gemini API Key'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    )}
 
-                    {/* Notification Settings */}
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="notification-settings">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className={`p-3 rounded-full ${isAdmin ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                                {isAdmin ? <Clock className="text-amber-700" size={24} /> : <Lock className="text-slate-500" size={24} />}
+                    {/* Notification Settings - Admin Only */}
+                    {isAdmin && (
+                        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="notification-settings">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 rounded-full bg-amber-100">
+                                    <Clock className="text-amber-700" size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">郵件通知設定</h2>
+                                    <p className="text-sm text-slate-500">設定 EmailJS 服務並手動發送 On-going 通知</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-800">郵件通知設定</h2>
-                                <p className="text-sm text-slate-500">設定 EmailJS 服務並手動發送 On-going 通知</p>
+                            {emailServiceError && (
+                                <div className="mb-4 text-sm text-red-600">{emailServiceError}</div>
+                            )}
+                            <div className="flex flex-col gap-4">
+                                <div className="pt-4 border-t border-slate-100 space-y-3">
+                                    <h3 className="text-sm font-bold text-slate-700">EmailJS 發信服務設定</h3>
+                                    <p className="text-xs text-slate-400">
+                                        需先於 EmailJS 建立服務與範本，並提供 template params：to_email / subject / message / from_name。
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service ID</label>
+                                            <input
+                                                type="text"
+                                                value={emailServiceConfig.serviceId}
+                                                onChange={(e) => handleEmailServiceChange('serviceId', e.target.value)}
+                                                className="w-full p-2 border rounded"
+                                                data-testid="emailjs-service-id"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Template ID</label>
+                                            <input
+                                                type="text"
+                                                value={emailServiceConfig.templateId}
+                                                onChange={(e) => handleEmailServiceChange('templateId', e.target.value)}
+                                                className="w-full p-2 border rounded"
+                                                data-testid="emailjs-template-id"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Public Key</label>
+                                            <input
+                                                type="text"
+                                                value={emailServiceConfig.publicKey}
+                                                onChange={(e) => handleEmailServiceChange('publicKey', e.target.value)}
+                                                className="w-full p-2 border rounded"
+                                                data-testid="emailjs-public-key"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">寄件人名稱</label>
+                                            <input
+                                                type="text"
+                                                value={emailServiceConfig.fromName}
+                                                onChange={(e) => handleEmailServiceChange('fromName', e.target.value)}
+                                                className="w-full p-2 border rounded"
+                                                placeholder="Job Management System"
+                                                data-testid="emailjs-from-name"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={handleSaveEmailServiceSettings}
+                                            className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            disabled={!db || isEmailServiceSaving}
+                                            data-testid="emailjs-save-button"
+                                        >
+                                            {isEmailServiceSaving ? '儲存中...' : '儲存 Email 服務'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="pt-4 border-t border-slate-100" data-testid="notification-manual-trigger">
+                                    <h3 className="text-sm font-bold text-slate-700 mb-2">發送 On-going 通知</h3>
+                                    <p className="text-xs text-slate-400 mb-3">
+                                        依目前 On-going 待辦與負責人資料寄送通知，不受每日限制，且不會更新每日寄送紀錄。
+                                    </p>
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={handleManualOnGoingNotification}
+                                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            disabled={isManualNotificationSending}
+                                            data-testid="notification-manual-trigger-button"
+                                        >
+                                            {isManualNotificationSending ? '發送中...' : '立即發送 On-going 通知'}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        {emailServiceError && (
-                            <div className="mb-4 text-sm text-red-600">{emailServiceError}</div>
-                        )}
-                        <div className="flex flex-col gap-4">
-                            <div className="pt-4 border-t border-slate-100 space-y-3">
-                                <h3 className="text-sm font-bold text-slate-700">EmailJS 發信服務設定</h3>
-                                <p className="text-xs text-slate-400">
-                                    需先於 EmailJS 建立服務與範本，並提供 template params：to_email / subject / message / from_name。
-                                </p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service ID</label>
-                                        <input
-                                            type="text"
-                                            value={emailServiceConfig.serviceId}
-                                            onChange={(e) => handleEmailServiceChange('serviceId', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            data-testid="emailjs-service-id"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Template ID</label>
-                                        <input
-                                            type="text"
-                                            value={emailServiceConfig.templateId}
-                                            onChange={(e) => handleEmailServiceChange('templateId', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            data-testid="emailjs-template-id"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Public Key</label>
-                                        <input
-                                            type="text"
-                                            value={emailServiceConfig.publicKey}
-                                            onChange={(e) => handleEmailServiceChange('publicKey', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            data-testid="emailjs-public-key"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">寄件人名稱</label>
-                                        <input
-                                            type="text"
-                                            value={emailServiceConfig.fromName}
-                                            onChange={(e) => handleEmailServiceChange('fromName', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            placeholder="Job Management System"
-                                            data-testid="emailjs-from-name"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={handleSaveEmailServiceSettings}
-                                        className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        disabled={!db || isEmailServiceSaving}
-                                        data-testid="emailjs-save-button"
-                                    >
-                                        {isEmailServiceSaving ? '儲存中...' : '儲存 Email 服務'}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="pt-4 border-t border-slate-100" data-testid="notification-manual-trigger">
-                                <h3 className="text-sm font-bold text-slate-700 mb-2">發送 On-going 通知</h3>
-                                <p className="text-xs text-slate-400 mb-3">
-                                    依目前 On-going 待辦與負責人資料寄送通知，不受每日限制，且不會更新每日寄送紀錄。
-                                </p>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={handleManualOnGoingNotification}
-                                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        disabled={isManualNotificationSending}
-                                        data-testid="notification-manual-trigger-button"
-                                    >
-                                        {isManualNotificationSending ? '發送中...' : '立即發送 On-going 通知'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    )}
 
                     {/* Admin Management Panel */}
                     {isAdmin && (
