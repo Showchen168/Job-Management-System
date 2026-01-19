@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.5</title>
+    <title>工作紀錄中心 v2.9.6</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.5"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.6"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -2069,16 +2069,20 @@
 
             // 團隊管理
             const handleAddTeam = async () => {
-                if (!newTeamName.trim() || !newTeamLeader.trim()) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請填寫團隊名稱和 Leader", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                const leaderList = newTeamLeader
+                    .split(',')
+                    .map(l => normalizePermissionEmail(l.trim()))
+                    .filter(Boolean);
+
+                if (!newTeamName.trim() || leaderList.length === 0) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請填寫團隊名稱並選擇至少一位 Leader", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
                     return;
                 }
-                const normalizedLeader = normalizePermissionEmail(newTeamLeader);
 
                 const newTeam = {
                     id: `team-${Date.now()}`,
                     name: newTeamName.trim(),
-                    leaderIds: [normalizedLeader],
+                    leaderIds: leaderList,
                     members: [] // 成員由 Leader 自行管理
                 };
 
@@ -2585,37 +2589,6 @@
                         </div>
                     )}
 
-                    {/* Leader Management Panel */}
-                    {isAdmin && (
-                        <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
-                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div><div><h2 className="text-xl font-bold text-teal-900">Leader 管理</h2><p className="text-sm text-teal-700">將使用者設為團隊 Leader（支援多 Leader）</p></div></div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-6">
-                                <select
-                                    value={newLeaderEmail}
-                                    onChange={(e) => setNewLeaderEmail(e.target.value)}
-                                    className="p-2 border border-teal-300 rounded-lg text-sm bg-white"
-                                >
-                                    <option value="">選擇使用者</option>
-                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => (
-                                        <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                                    ))}
-                                </select>
-                                <select
-                                    value={selectedTeamForLeader}
-                                    onChange={(e) => setSelectedTeamForLeader(e.target.value)}
-                                    className="p-2 border border-teal-300 rounded-lg text-sm bg-white"
-                                >
-                                    <option value="">建立新團隊</option>
-                                    {teams.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                </select>
-                                <button onClick={handleAddLeader} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm whitespace-nowrap">新增 Leader</button>
-                            </div>
-                            <div className="bg-white rounded-lg border border-teal-200 overflow-hidden"><ul className="divide-y divide-teal-100">{teams.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 Leader</li>) : [...new Set(teams.flatMap(t => getTeamLeaders(t)))].map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-teal-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-teal-600">{teams.filter(t => getTeamLeaders(t).includes(email)).map(t => t.name).join(', ')}</span></li>))}</ul></div>
-                        </div>
-                    )}
-
                     {/* Team Management Panel */}
                     {canViewTeamPanel && (
                         <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
@@ -2632,14 +2605,35 @@
                             {canEditTeams && (
                                 <div className="bg-white p-4 rounded-lg border border-teal-200 mb-4">
                                     <h3 className="font-bold text-slate-700 mb-3">新增團隊</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                        <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="團隊名稱" className="p-2 border border-teal-300 rounded-lg text-sm" />
-                                        <select value={newTeamLeader} onChange={(e) => setNewTeamLeader(e.target.value)} className="p-2 border border-teal-300 rounded-lg text-sm bg-white">
-                                            <option value="">選擇 Leader</option>
-                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => (
-                                                <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                                            ))}
-                                        </select>
+                                    <div className="mb-3">
+                                        <label className="block text-xs text-slate-500 mb-1">團隊名稱</label>
+                                        <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="輸入團隊名稱" className="w-full p-2 border border-teal-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-xs text-slate-500 mb-1">選擇 Leader（可多選）</label>
+                                        <div className="max-h-32 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
+                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => {
+                                                const leaderList = newTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
+                                                const isSelected = leaderList.includes(u.email.toLowerCase());
+                                                return (
+                                                    <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setNewTeamLeader(prev => prev ? `${prev}, ${u.email}` : u.email);
+                                                                } else {
+                                                                    setNewTeamLeader(prev => prev.split(',').map(l => l.trim()).filter(l => l.toLowerCase() !== u.email.toLowerCase()).join(', '));
+                                                                }
+                                                            }}
+                                                            className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                        />
+                                                        <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-teal-600 mb-3">團隊成員由 Leader 自行管理。</p>
                                     <button onClick={handleAddTeam} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm">建立團隊</button>
@@ -2648,7 +2642,7 @@
                             {/* 團隊列表 */}
                             <div className="space-y-3">
                                 {(() => {
-                                    const visibleTeams = canEditTeams ? teams : teams.filter(t => t.leaderId === user?.email);
+                                    const visibleTeams = canEditTeams ? teams : teams.filter(t => getTeamLeaders(t).includes(user?.email));
                                     if (!visibleTeams || visibleTeams.length === 0) {
                                         return <p className="text-sm text-slate-400">{canEditTeams ? '尚無團隊' : '你目前沒有管理的團隊'}</p>;
                                     }
@@ -2664,13 +2658,30 @@
                                                         </div>
                                                         {canEditTeams && (
                                                             <div>
-                                                                <label className="block text-xs text-slate-500 mb-1">Leader</label>
-                                                                <select value={editTeamLeader} onChange={(e) => setEditTeamLeader(e.target.value)} className="w-full p-2 border border-teal-300 rounded-lg text-sm bg-white">
-                                                                    <option value="">選擇 Leader</option>
-                                                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => (
-                                                                        <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                                                                    ))}
-                                                                </select>
+                                                                <label className="block text-xs text-slate-500 mb-1">Leader（可多選）</label>
+                                                                <div className="max-h-32 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
+                                                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => {
+                                                                        const leaderList = editTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
+                                                                        const isSelected = leaderList.includes(u.email.toLowerCase());
+                                                                        return (
+                                                                            <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isSelected}
+                                                                                    onChange={(e) => {
+                                                                                        if (e.target.checked) {
+                                                                                            setEditTeamLeader(prev => prev ? `${prev}, ${u.email}` : u.email);
+                                                                                        } else {
+                                                                                            setEditTeamLeader(prev => prev.split(',').map(l => l.trim()).filter(l => l.toLowerCase() !== u.email.toLowerCase()).join(', '));
+                                                                                        }
+                                                                                    }}
+                                                                                    className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                                                />
+                                                                                <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
+                                                                            </label>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
