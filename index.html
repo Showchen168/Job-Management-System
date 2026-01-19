@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.1</title>
+    <title>工作紀錄中心 v2.9.2</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.1"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.2"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -2891,7 +2891,9 @@
             const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
             const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
             const isUserCanUseAI = useMemo(() => checkCanUseAI(user, cloudAIUsers), [user, cloudAIUsers]);
+            const isUserLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
             const isUserPrivileged = isUserAdmin || isUserEditor;
+            const canAccessSettings = isUserAdmin || isUserEditor || isUserLeader;
             const userDisplayName = useMemo(() => formatEmailPrefix(user?.email), [user]);
             const connectionIndicatorClass = useMemo(() => {
                 if (connectionStatus.includes('已連線')) return 'bg-emerald-400';
@@ -2948,7 +2950,7 @@
                             <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
                             <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                             
-                            {(isUserAdmin || isUserEditor) && (
+                            {canAccessSettings && (
                                 <div className="pt-4 border-t border-slate-700 mt-4">
                                     <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={20} />} label="系統設定" />
                                 </div>
@@ -2966,6 +2968,8 @@
                                             <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
                                         ) : isUserEditor ? (
                                             <span className="text-blue-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
+                                        ) : isUserLeader ? (
+                                            <span className="text-teal-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
                                         ) : (
                                             'User'
                                         )}
@@ -3012,7 +3016,7 @@
                         )}
                         {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} />}
                         {activeTab === 'settings' && (
-                            (isUserAdmin || isUserEditor) ? (
+                            canAccessSettings ? (
                                 <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} teams={teams} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
