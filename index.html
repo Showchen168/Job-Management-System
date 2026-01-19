@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.8.5</title>
+    <title>工作紀錄中心 v2.8.9</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.8.8"; // 移除信箱自動補全域名功能
+        const APP_VERSION = "v2.8.9"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1184,18 +1184,17 @@
                     if (isLogin) {
                         await signInWithEmailAndPassword(auth, email, password);
                     } else {
-                        const normalizedPrefix = emailPrefix.trim();
-                        if (!normalizedPrefix) {
-                            setAuthError('請輸入 Email 前綴');
+                        const registerEmail = emailPrefix.trim().toLowerCase();
+                        if (!registerEmail) {
+                            setAuthError('請輸入 Email 信箱');
                             setLoading(false);
                             return;
                         }
-                        if (normalizedPrefix.includes('@') || !/^[A-Za-z0-9._%+-]+$/.test(normalizedPrefix)) {
-                            setAuthError('Email 前綴格式不正確');
+                        if (!registerEmail.includes('@')) {
+                            setAuthError('請輸入完整 Email 地址');
                             setLoading(false);
                             return;
                         }
-                        const registerEmail = `${normalizedPrefix}${AIVRES_EMAIL_DOMAIN}`;
                         await createUserWithEmailAndPassword(auth, registerEmail, password);
                     }
                 } catch (err) {
@@ -1281,29 +1280,15 @@
                         <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
-                            {isLogin ? (
-                                <input
-                                    type="email"
-                                    required
-                                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    data-testid="login-email"
-                                />
-                            ) : (
-                                <div className="flex items-center rounded-lg border border-slate-300 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition">
-                                    <input
-                                        type="text"
-                                        required
-                                        className="w-full p-3 outline-none"
-                                        placeholder="輸入 Email 前綴"
-                                        value={emailPrefix}
-                                        onChange={(e) => setEmailPrefix(e.target.value)}
-                                    />
-                                    <span className="px-3 text-slate-500 bg-slate-50 border-l border-slate-200">{AIVRES_EMAIL_DOMAIN}</span>
-                                </div>
-                            )}
-                            {!isLogin && <p className="mt-2 text-xs text-slate-500">系統會自動補上公司信箱網域。</p>}
+                            <input
+                                type="email"
+                                required
+                                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                                placeholder={isLogin ? "" : "輸入完整 Email 地址"}
+                                value={isLogin ? email : emailPrefix}
+                                onChange={(e) => isLogin ? setEmail(e.target.value) : setEmailPrefix(e.target.value)}
+                                data-testid="login-email"
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">密碼</label>
