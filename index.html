@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.3</title>
+    <title>工作紀錄中心 v2.9.4</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.3"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.4"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -142,10 +142,19 @@
             return cloudAIUsers.includes(user.email);
         };
 
+        // 取得團隊的所有 Leader（支援新舊格式）
+        const getTeamLeaders = (team) => {
+            if (!team) return [];
+            if (team.leaderIds && Array.isArray(team.leaderIds)) {
+                return team.leaderIds;
+            }
+            return team.leaderId ? [team.leaderId] : [];
+        };
+
         // 檢查使用者是否為任一 Team 的 Leader
         const checkIsLeader = (user, teams = []) => {
             if (!user || !user.email) return false;
-            return teams.some(team => team.leaderId === user.email);
+            return teams.some(team => getTeamLeaders(team).includes(user.email));
         };
 
         // 取得 Leader 所管理的所有成員 email
@@ -153,8 +162,8 @@
             if (!user || !user.email) return [];
             const memberEmails = new Set();
             teams.forEach(team => {
-                if (team.leaderId === user.email) {
-                    team.members.forEach(m => memberEmails.add(m));
+                if (getTeamLeaders(team).includes(user.email)) {
+                    (team.members || []).forEach(m => memberEmails.add(m));
                 }
             });
             return Array.from(memberEmails);
@@ -1765,6 +1774,7 @@
             const [newEditorEmail, setNewEditorEmail] = useState('');
             const [newAIUserEmail, setNewAIUserEmail] = useState('');
             const [newLeaderEmail, setNewLeaderEmail] = useState('');
+            const [selectedTeamForLeader, setSelectedTeamForLeader] = useState('');
             const [newTeamName, setNewTeamName] = useState('');
             const [newTeamLeader, setNewTeamLeader] = useState('');
             const [newTeamMembers, setNewTeamMembers] = useState('');
@@ -2011,27 +2021,48 @@
                     return;
                 }
                 const normalizedEmail = normalizePermissionEmail(newLeaderEmail);
-                // 檢查是否已經是 Leader
-                const existingLeaders = teams.map(t => t.leaderId.toLowerCase());
-                if (existingLeaders.includes(normalizedEmail.toLowerCase())) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "該使用者已經是 Leader", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
-                    return;
-                }
-                // 自動建立團隊
                 const leaderName = formatEmailPrefix(normalizedEmail);
-                const newTeam = {
-                    id: `team-${Date.now()}`,
-                    name: `${leaderName} 的團隊`,
-                    leaderId: normalizedEmail,
-                    members: []
-                };
+                const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+
                 try {
-                    const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
-                    await setDoc(teamsRef, { list: arrayUnion(newTeam) }, { merge: true });
+                    if (selectedTeamForLeader) {
+                        // 添加到現有團隊
+                        const snapshot = await getDoc(teamsRef);
+                        if (snapshot.exists()) {
+                            const currentList = snapshot.data().list || [];
+                            const updatedList = currentList.map(t => {
+                                if (t.id === selectedTeamForLeader) {
+                                    const currentLeaders = getTeamLeaders(t);
+                                    if (currentLeaders.map(l => l.toLowerCase()).includes(normalizedEmail.toLowerCase())) {
+                                        throw new Error("該使用者已經是此團隊的 Leader");
+                                    }
+                                    return {
+                                        ...t,
+                                        leaderIds: [...currentLeaders, normalizedEmail],
+                                        leaderId: undefined // 移除舊格式
+                                    };
+                                }
+                                return t;
+                            });
+                            await setDoc(teamsRef, { list: updatedList }, { merge: true });
+                            const teamName = currentList.find(t => t.id === selectedTeamForLeader)?.name || '';
+                            setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${leaderName} 加入團隊「${teamName}」為 Leader`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                        }
+                    } else {
+                        // 建立新團隊
+                        const newTeam = {
+                            id: `team-${Date.now()}`,
+                            name: `${leaderName} 的團隊`,
+                            leaderIds: [normalizedEmail],
+                            members: []
+                        };
+                        await setDoc(teamsRef, { list: arrayUnion(newTeam) }, { merge: true });
+                        setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${leaderName} 設為新團隊的 Leader`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                    }
                     setNewLeaderEmail('');
-                    setModalConfig({ isOpen: true, type: 'confirm', title: '成功', content: `已將 ${leaderName} 設為 Leader，團隊成員可在團隊管理中編輯`, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
+                    setSelectedTeamForLeader('');
                 } catch (e) {
-                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "操作失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message || "操作失敗", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
                 }
             };
 
@@ -2046,7 +2077,7 @@
                 const newTeam = {
                     id: `team-${Date.now()}`,
                     name: newTeamName.trim(),
-                    leaderId: normalizedLeader,
+                    leaderIds: [normalizedLeader],
                     members: [] // 成員由 Leader 自行管理
                 };
 
@@ -2080,7 +2111,7 @@
             // 檢查用戶是否可以管理特定團隊
             const canManageTeam = (team) => {
                 if (isAdmin || isEditor) return true;
-                if (isLeader && user?.email && team.leaderId === user.email) return true;
+                if (isLeader && user?.email && getTeamLeaders(team).includes(user.email)) return true;
                 return false;
             };
 
@@ -2088,7 +2119,7 @@
             const startEditTeam = (team) => {
                 setEditingTeamId(team.id);
                 setEditTeamName(team.name);
-                setEditTeamLeader(team.leaderId);
+                setEditTeamLeader(getTeamLeaders(team).join(', '));
                 setEditTeamMembers(team.members ? team.members.join(', ') : '');
             };
 
@@ -2110,6 +2141,10 @@
                     .split(',')
                     .map(m => normalizePermissionEmail(m.trim()))
                     .filter(Boolean);
+                const leaderList = editTeamLeader
+                    .split(',')
+                    .map(l => normalizePermissionEmail(l.trim()))
+                    .filter(Boolean);
 
                 const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
                 try {
@@ -2125,7 +2160,8 @@
                                 };
                                 // 只有 Admin/Editor 可以變更 Leader
                                 if (isAdmin || isEditor) {
-                                    updatedTeam.leaderId = normalizePermissionEmail(editTeamLeader);
+                                    updatedTeam.leaderIds = leaderList;
+                                    delete updatedTeam.leaderId; // 移除舊格式
                                 }
                                 return updatedTeam;
                             }
@@ -2551,21 +2587,31 @@
                     {/* Leader Management Panel */}
                     {isAdmin && (
                         <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
-                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div><div><h2 className="text-xl font-bold text-teal-900">Leader 管理</h2><p className="text-sm text-teal-700">快速將使用者設為團隊 Leader</p></div></div>
-                            <div className="flex gap-2 mb-6">
+                            <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div><div><h2 className="text-xl font-bold text-teal-900">Leader 管理</h2><p className="text-sm text-teal-700">將使用者設為團隊 Leader（支援多 Leader）</p></div></div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-6">
                                 <select
                                     value={newLeaderEmail}
                                     onChange={(e) => setNewLeaderEmail(e.target.value)}
-                                    className="flex-1 p-2 border border-teal-300 rounded-lg text-sm bg-white"
+                                    className="p-2 border border-teal-300 rounded-lg text-sm bg-white"
                                 >
                                     <option value="">選擇使用者</option>
-                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !teams.some(t => t.leaderId.toLowerCase() === u.email.toLowerCase())).map(u => (
+                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => (
                                         <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={selectedTeamForLeader}
+                                    onChange={(e) => setSelectedTeamForLeader(e.target.value)}
+                                    className="p-2 border border-teal-300 rounded-lg text-sm bg-white"
+                                >
+                                    <option value="">建立新團隊</option>
+                                    {teams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
                                 <button onClick={handleAddLeader} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm whitespace-nowrap">新增 Leader</button>
                             </div>
-                            <div className="bg-white rounded-lg border border-teal-200 overflow-hidden"><ul className="divide-y divide-teal-100">{teams.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 Leader</li>) : [...new Set(teams.map(t => t.leaderId))].map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-teal-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-teal-600">{teams.filter(t => t.leaderId === email).map(t => t.name).join(', ')}</span></li>))}</ul></div>
+                            <div className="bg-white rounded-lg border border-teal-200 overflow-hidden"><ul className="divide-y divide-teal-100">{teams.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 Leader</li>) : [...new Set(teams.flatMap(t => getTeamLeaders(t)))].map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-teal-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-teal-600">{teams.filter(t => getTeamLeaders(t).includes(email)).map(t => t.name).join(', ')}</span></li>))}</ul></div>
                         </div>
                     )}
 
@@ -2630,7 +2676,7 @@
                                                     <div>
                                                         <label className="block text-xs text-slate-500 mb-1">選擇成員</label>
                                                         <div className="max-h-40 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
-                                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && u.email !== editTeamLeader).map(u => {
+                                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !editTeamLeader.split(',').map(l => l.trim().toLowerCase()).includes(u.email.toLowerCase())).map(u => {
                                                                 const memberList = editTeamMembers.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
                                                                 const isSelected = memberList.includes(u.email.toLowerCase());
                                                                 return (
@@ -2651,7 +2697,7 @@
                                                                     </label>
                                                                 );
                                                             })}
-                                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && u.email !== editTeamLeader).length === 0 && (
+                                                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !editTeamLeader.split(',').map(l => l.trim().toLowerCase()).includes(u.email.toLowerCase())).length === 0 && (
                                                                 <p className="text-xs text-slate-400 p-2">沒有可選擇的成員</p>
                                                             )}
                                                         </div>
@@ -2667,7 +2713,7 @@
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div>
                                                             <h4 className="font-bold text-slate-800">{team.name}</h4>
-                                                            <p className="text-xs text-teal-600">Leader: {formatEmailPrefix(team.leaderId)}</p>
+                                                            <p className="text-xs text-teal-600">Leader: {getTeamLeaders(team).map(l => formatEmailPrefix(l)).join(', ')}</p>
                                                         </div>
                                                         <div className="flex gap-1">
                                                             {canManageTeam(team) && (
