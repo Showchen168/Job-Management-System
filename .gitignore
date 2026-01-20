@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Test results
+test-results/
+tests/screenshots/
+
+# Package lock
+package-lock.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
