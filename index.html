@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.9</title>
+    <title>工作紀錄中心 v2.9.10</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.9"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.10"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1085,9 +1085,9 @@
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">事項內容 <span className="text-red-500">*</span></label><input name="title" value={formData.title} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required /></div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊</label>
-                                    <select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
-                                        <option value="">不指定團隊</option>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊 <span className="text-red-500">*</span></label>
+                                    <select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                                        <option value="" disabled>請選擇團隊</option>
                                         {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                     </select>
                                 </div>
@@ -1602,7 +1602,7 @@
             };
 
             const handleSave = async (formData) => {
-                if (!formData.title?.trim() || !formData.assignee?.trim() || !formData.source || !formData.status || !formData.assignedDate || !formData.dueDate || !formData.progress?.trim()) {
+                if (!formData.title?.trim() || !formData.teamId || !formData.assignee?.trim() || !formData.source || !formData.status || !formData.assignedDate || !formData.dueDate || !formData.progress?.trim()) {
                     setModalConfig({ isOpen: true, type: 'danger', title: '驗證錯誤', content: "請填寫所有必填欄位", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
                     return;
                 }
