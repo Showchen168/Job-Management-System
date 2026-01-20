@@ -1,5 +1,5 @@
 {
-  "lastSync": "2026-01-20T07:49:41.639Z",
+  "lastSync": "2026-01-20T08:04:03.105Z",
   "sourceVersion": "v2.9.17",
   "componentsCount": 15,
   "components": [
@@ -124,5 +124,12 @@
       "yellow-200",
       "yellow-300"
     ]
+  },
+  "patterns": {
+    "auth": 4,
+    "permission": 5,
+    "team": 3,
+    "ai": 3,
+    "utilities": 5
   }
 }

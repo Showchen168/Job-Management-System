@@ -1329,6 +1329,291 @@ function generateStarterTemplate(version) {
 }
 
 // ============================================
+// 生成 PATTERNS.md (功能模式文件)
+// ============================================
+
+function extractFunctionalPatterns(content) {
+    const patterns = {
+        auth: [],
+        permission: [],
+        team: [],
+        ai: [],
+        utilities: []
+    };
+
+    // 提取認證相關
+    if (content.includes('signInWithEmailAndPassword')) patterns.auth.push('Email/Password 登入');
+    if (content.includes('createUserWithEmailAndPassword')) patterns.auth.push('註冊新帳號');
+    if (content.includes('sendPasswordResetEmail')) patterns.auth.push('密碼重設');
+    if (content.includes('onAuthStateChanged')) patterns.auth.push('登入狀態監聽');
+
+    // 提取權限相關
+    if (content.includes('checkIsAdmin')) patterns.permission.push('Admin 權限檢查');
+    if (content.includes('checkIsEditor')) patterns.permission.push('Editor 權限檢查');
+    if (content.includes('checkIsLeader')) patterns.permission.push('Leader 權限檢查');
+    if (content.includes('ROOT_ADMINS')) patterns.permission.push('Root Admin 機制');
+    if (content.includes('createPermissionManager')) patterns.permission.push('權限管理工具');
+
+    // 提取團隊相關
+    if (content.includes('getTeamLeaders')) patterns.team.push('取得團隊 Leader');
+    if (content.includes('getLeaderTeamMembers')) patterns.team.push('取得團隊成員');
+    if (content.includes('checkIsLeader')) patterns.team.push('Leader 身份檢查');
+
+    // 提取 AI 相關
+    if (content.includes('callGeminiAI')) patterns.ai.push('Gemini API 呼叫');
+    if (content.includes('extractContentForAI')) patterns.ai.push('圖片內容提取');
+    if (content.includes('AIConversationModal')) patterns.ai.push('AI 對話介面');
+
+    // 提取工具函數
+    if (content.includes('copyToClipboard')) patterns.utilities.push('剪貼簿複製');
+    if (content.includes('exportToCSV')) patterns.utilities.push('CSV 匯出');
+    if (content.includes('compressImage')) patterns.utilities.push('圖片壓縮');
+    if (content.includes('formatLocalDate')) patterns.utilities.push('日期格式化');
+    if (content.includes('downloadAsWord')) patterns.utilities.push('Word 文件下載');
+
+    return patterns;
+}
+
+function generatePatternsDoc(patterns, version) {
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    return `# 功能模式 Functional Patterns
+
+> 自動同步自「工作紀錄中心」${version} - 最後更新: ${timestamp}
+
+本文件記錄主專案中可重用的功能模式，供其他專案參考實作。
+
+---
+
+## 功能模組總覽
+
+| 模組 | 功能數量 | 說明 |
+|------|----------|------|
+| 身份驗證 | ${patterns.auth.length} | Firebase Auth 整合 |
+| 權限管理 | ${patterns.permission.length} | 多角色權限系統 |
+| 團隊管理 | ${patterns.team.length} | 團隊協作功能 |
+| AI 整合 | ${patterns.ai.length} | Gemini API 整合 |
+| 通用工具 | ${patterns.utilities.length} | 常用工具函數 |
+
+---
+
+## 1. 身份驗證 (Authentication)
+
+### 支援功能
+${patterns.auth.map(f => `- ${f}`).join('\n')}
+
+### 使用方式
+\`\`\`javascript
+// 登入
+await signInWithEmailAndPassword(auth, email, password);
+
+// 註冊
+await createUserWithEmailAndPassword(auth, email, password);
+
+// 登出
+await signOut(auth);
+
+// 監聽狀態
+onAuthStateChanged(auth, (user) => { /* ... */ });
+\`\`\`
+
+---
+
+## 2. 權限管理 (Permission Management)
+
+### 支援功能
+${patterns.permission.map(f => `- ${f}`).join('\n')}
+
+### 權限層級
+| 層級 | 角色 | 權限說明 |
+|------|------|----------|
+| 1 | Root Admin | 最高權限，硬編碼不可移除 |
+| 2 | Admin | 管理所有資料和權限 |
+| 3 | Editor | 存取所有資料 |
+| 4 | Leader | 存取團隊資料 |
+| 5 | User | 僅存取自己資料 |
+
+### 使用方式
+\`\`\`javascript
+const isAdmin = checkIsAdmin(user, cloudAdmins);
+const isEditor = checkIsEditor(user, cloudEditors);
+const canAccessAll = isAdmin || isEditor;
+\`\`\`
+
+---
+
+## 3. 團隊管理 (Team Management)
+
+### 支援功能
+${patterns.team.map(f => `- ${f}`).join('\n')}
+
+### 資料結構
+\`\`\`javascript
+{
+    id: "team-uuid",
+    name: "團隊名稱",
+    leaderIds: ["leader@example.com"],
+    members: ["member@example.com"]
+}
+\`\`\`
+
+### 使用方式
+\`\`\`javascript
+const isLeader = checkIsLeader(user, teams);
+const teamMembers = getLeaderTeamMembers(user, teams);
+\`\`\`
+
+---
+
+## 4. AI 整合 (AI Integration)
+
+### 支援功能
+${patterns.ai.map(f => `- ${f}`).join('\n')}
+
+### 使用方式
+\`\`\`javascript
+const result = await callGeminiAI(
+    [{ text: prompt }],
+    apiKey,
+    'gemini-2.5-flash'
+);
+\`\`\`
+
+---
+
+## 5. 通用工具 (Utilities)
+
+### 支援功能
+${patterns.utilities.map(f => `- ${f}`).join('\n')}
+
+---
+
+## 詳細文件
+
+完整的程式碼範例和實作細節，請參考主專案 \`index.html\` 或在提示詞中指定需要的功能模組。
+
+---
+
+*由 sync-design-system.js 自動生成*
+`;
+}
+
+// ============================================
+// 生成 PROMPT.md (提示詞指南)
+// ============================================
+
+function generatePromptDoc(patterns, components, version) {
+    const timestamp = new Date().toISOString().split('T')[0];
+
+    return `# AI 提示詞指南 Prompt Guide
+
+> 自動同步自「工作紀錄中心」${version} - 最後更新: ${timestamp}
+
+本文件提供在其他專案中引用此設計系統和功能模式的標準提示詞。
+
+---
+
+## 快速參考
+
+### 新專案 (UI + 功能)
+\`\`\`
+請使用以下設計系統建立新專案：
+https://github.com/Showchen168/Job-Management-System/tree/main/design-system
+
+參考檔案：
+- starter-template/index.html (專案模板)
+- DESIGN_SYSTEM.md (設計規範)
+- PATTERNS.md (功能模式)
+- components/ (元件庫)
+
+需求：[描述你的需求]
+\`\`\`
+
+### 僅 UI 改良
+\`\`\`
+請參考以下設計系統統一我的專案 UI 風格：
+https://github.com/Showchen168/Job-Management-System/tree/main/design-system
+
+重點：
+- 色彩：blue-600 主色、emerald-600 成功、red-600 錯誤
+- 卡片：rounded-xl shadow-sm border border-slate-200
+- 按鈕：rounded-lg font-medium transition
+- 文字：標題 slate-800、內文 slate-600
+
+只改 UI，保持功能不變。
+\`\`\`
+
+---
+
+## 功能模組提示詞
+
+### 身份驗證
+\`\`\`
+請參考 PATTERNS.md 實作登入功能：
+- Firebase Auth (Email/Password)
+- 登入/註冊/忘記密碼
+- 錯誤訊息中文化
+\`\`\`
+
+### 權限管理
+\`\`\`
+請參考 PATTERNS.md 實作權限系統：
+- 三級權限：Admin > Editor > User
+- Firestore 儲存權限清單
+- UI 根據權限顯示/隱藏功能
+\`\`\`
+
+### 團隊管理
+\`\`\`
+請參考 PATTERNS.md 實作團隊功能：
+- 團隊 CRUD
+- 多組長支援
+- 組長可查看組員資料
+\`\`\`
+
+### AI 整合
+\`\`\`
+請參考 PATTERNS.md 實作 AI 功能：
+- Gemini API 呼叫
+- 支援文字和圖片
+- AI 對話介面
+\`\`\`
+
+---
+
+## 目前可用資源
+
+### 元件庫 (${components.length} 個源元件)
+${components.slice(0, 10).map(c => `- ${c}`).join('\n')}
+${components.length > 10 ? `- ... 等共 ${components.length} 個` : ''}
+
+### 功能模式
+- 身份驗證: ${patterns.auth.length} 項
+- 權限管理: ${patterns.permission.length} 項
+- 團隊管理: ${patterns.team.length} 項
+- AI 整合: ${patterns.ai.length} 項
+- 通用工具: ${patterns.utilities.length} 項
+
+---
+
+## 相關文件
+
+| 文件 | 說明 |
+|------|------|
+| README.md | 設計系統總覽 |
+| DESIGN_SYSTEM.md | 完整設計規範 |
+| PATTERNS.md | 功能模式文件 |
+| PROMPT.md | 本文件 |
+| components/ | 元件庫 |
+| starter-template/ | 專案模板 |
+
+---
+
+*由 sync-design-system.js 自動生成*
+`;
+}
+
+// ============================================
 // 主函數
 // ============================================
 
@@ -1373,17 +1658,30 @@ function main() {
     console.log('\n📄 更新專案模板...');
     writeFile(STARTER_TEMPLATE, generateStarterTemplate(version));
 
-    // 5. 更新 version.json
+    // 5. 更新 PATTERNS.md 和 PROMPT.md
+    console.log('\n📄 更新功能模式和提示詞文件...');
+    const patterns = extractFunctionalPatterns(sourceContent);
+    writeFile(path.join(DESIGN_SYSTEM_DIR, 'PATTERNS.md'), generatePatternsDoc(patterns, version));
+    writeFile(path.join(DESIGN_SYSTEM_DIR, 'PROMPT.md'), generatePromptDoc(patterns, components, version));
+
+    // 6. 更新 version.json
     const versionInfo = {
         lastSync: new Date().toISOString(),
         sourceVersion: version,
         componentsCount: components.length,
         components: components,
         colors: colors,
+        patterns: {
+            auth: patterns.auth.length,
+            permission: patterns.permission.length,
+            team: patterns.team.length,
+            ai: patterns.ai.length,
+            utilities: patterns.utilities.length,
+        },
     };
     writeFile(path.join(DESIGN_SYSTEM_DIR, 'version.json'), JSON.stringify(versionInfo, null, 2));
 
-    // 6. 生成同步報告
+    // 7. 生成同步報告
     const report = `# Design System 同步報告
 
 生成時間: ${new Date().toISOString()}
@@ -1391,6 +1689,7 @@ function main() {
 
 ## 更新內容
 
+### UI 元件
 - ✅ components/Button.jsx
 - ✅ components/Input.jsx
 - ✅ components/Modal.jsx
@@ -1400,17 +1699,31 @@ function main() {
 - ✅ components/Search.jsx
 - ✅ components/Layout.jsx
 - ✅ components/index.js
-- ✅ DESIGN_SYSTEM.md
-- ✅ README.md
+
+### 文件
+- ✅ DESIGN_SYSTEM.md (設計規範)
+- ✅ PATTERNS.md (功能模式)
+- ✅ PROMPT.md (提示詞指南)
+- ✅ README.md (說明文件)
+
+### 模板和資訊
 - ✅ starter-template/index.html
 - ✅ version.json
 
 ## 統計
 
+### UI
 - 元件數量: ${components.length}
 - 背景色: ${colors.bg.length} 種
 - 文字色: ${colors.text.length} 種
 - 邊框色: ${colors.border.length} 種
+
+### 功能模式
+- 身份驗證: ${patterns.auth.length} 項
+- 權限管理: ${patterns.permission.length} 項
+- 團隊管理: ${patterns.team.length} 項
+- AI 整合: ${patterns.ai.length} 項
+- 通用工具: ${patterns.utilities.length} 項
 
 ---
 *由 sync-design-system.js 自動生成*
