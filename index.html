@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.6</title>
+    <title>工作紀錄中心 v2.9.7</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.6"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.7"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -734,8 +734,8 @@
             // 根據資料類型設定不同的預設提示詞
             const dateRangeText = formatDateRange();
             const weeklyReportPrompt = dateRangeText
-                ? `請根據以下 ${dateRangeText} 期間的工作進展，整理一份給領導的周報。格式要求：\n1. 本周完成事項（按重要性排序）\n2. 進行中工作及進度百分比\n3. 下周工作計劃\n4. 需要協調或支援事項\n\n請使用 Markdown 格式，語氣專業簡潔，突出重點成果。標題請標註報告期間。`
-                : '請根據以下工作進展，整理一份給領導的周報。格式要求：\n1. 本周完成事項（按重要性排序）\n2. 進行中工作及進度百分比\n3. 下周工作計劃\n4. 需要協調或支援事項\n\n請使用 Markdown 格式，語氣專業簡潔，突出重點成果。';
+                ? `請根據以下 ${dateRangeText} 期間的工作進展，整理一份給領導的周報。格式要求：\n1. 本周完成事項（按重要性排序，使用條列）\n2. 進行中工作及進度百分比（請使用 Markdown 表格呈現，欄位：事項｜負責人｜進度百分比｜本周進展｜備註）\n3. 下周工作計劃\n4. 需要協調或支援事項\n\n請使用 Markdown 格式，語氣專業簡潔，突出重點成果。標題請標註報告期間。`
+                : '請根據以下工作進展，整理一份給領導的周報。格式要求：\n1. 本周完成事項（按重要性排序，使用條列）\n2. 進行中工作及進度百分比（請使用 Markdown 表格呈現，欄位：事項｜負責人｜進度百分比｜本周進展｜備註）\n3. 下周工作計劃\n4. 需要協調或支援事項\n\n請使用 Markdown 格式，語氣專業簡潔，突出重點成果。';
 
             const defaultPrompts = dataType === 'meetings' ? [
                 { label: '會議摘要', prompt: '請根據以下會議記錄，整理出一份專業的會議紀要，包含執行摘要、重點議題討論、關鍵決策、待辦事項。請使用 Markdown 格式輸出。' },
@@ -743,7 +743,7 @@
                 { label: '決策總結', prompt: '請從以下會議記錄中總結所有重要決策和結論。請使用 Markdown 格式輸出。' },
                 { label: '報告格式', prompt: '請將以下會議記錄整理成適合發送給主管的報告格式，語氣專業且簡潔。請使用 Markdown 格式輸出。' }
             ] : [
-                { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告，包含核心成果、進行中工作、風險與阻礙、下階段計劃。請使用 Markdown 格式輸出，包含適當的標題和條列。' },
+                { label: '工作進度總結', prompt: '請根據以下工作內容，整理出一份專業的工作進度報告。格式要求：\n1. 核心成果（條列）\n2. 進行中工作（使用 Markdown 表格呈現，欄位：事項｜負責人｜進度百分比｜本周進展｜備註）\n3. 風險與阻礙\n4. 下階段計劃\n\n請使用 Markdown 格式輸出。' },
                 { label: '周報', prompt: weeklyReportPrompt },
                 { label: '會議報告', prompt: '請將以下工作內容整理成適合在會議中報告的格式，重點突出、簡潔明瞭。請使用 Markdown 格式輸出。' },
                 { label: '郵件摘要', prompt: '請將以下工作內容整理成適合發送給主管的工作更新郵件內容，語氣專業且簡潔。請使用 Markdown 格式輸出。' },
