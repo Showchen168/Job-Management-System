@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.10</title>
+    <title>工作紀錄中心 v2.9.11</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.10"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.11"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1104,7 +1104,7 @@
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">狀態 <span className="text-red-500">*</span></label><select name="status" value={formData.status} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required><option value="" disabled>請選擇狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">交辦日期 <span className="text-red-500">*</span></label><input type="date" name="assignedDate" value={formData.assignedDate} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required /></div>
                                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">預計完成 <span className="text-red-500">*</span></label><input type="date" name="dueDate" value={formData.dueDate} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required /></div>
-                                <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">進展更新 <span className="text-red-500">*</span></label><textarea name="progress" value={formData.progress} onChange={handleChange} rows="3" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required /></div>
+                                <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">進展更新 <span className="text-red-500">*</span></label><p className="text-xs text-slate-400 mb-1">務必按照日期+內容的格式填寫，如：1/1 完成OOXX</p><textarea name="progress" value={formData.progress} onChange={handleChange} rows="3" className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="例：1/20 完成需求分析" required /></div>
                                 <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 text-slate-400">延遲原因 (選填)</label><input name="delayReason" value={formData.delayReason} onChange={handleChange} className="w-full p-2.5 border border-slate-200 bg-slate-50 rounded-lg" placeholder="非必填" /></div>
                             </div>
                         </div>
