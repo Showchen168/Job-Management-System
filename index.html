@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.7</title>
+    <title>工作紀錄中心 v2.9.8</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.7"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.8"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -1053,32 +1053,49 @@
 
         // --- 3. Sub-Components (Tasks & Meetings) ---
 
-        const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses, assigneeOptions }) => {
+        const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses, assigneeOptions, teams = [] }) => {
             const [formData, setFormData] = useState({
-                title: '', assignee: '', status: 'Pending', source: '', assignedDate: new Date().toISOString().split('T')[0], dueDate: '', delayReason: '', progress: '', ...initialData
+                title: '', assignee: '', status: 'Pending', source: '', assignedDate: new Date().toISOString().split('T')[0], dueDate: '', delayReason: '', progress: '', teamId: '', ...initialData
             });
             const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+            // 根據選擇的團隊過濾負責人選項
+            const filteredAssignees = useMemo(() => {
+                if (!formData.teamId) return assigneeOptions || [];
+                const selectedTeam = teams.find(t => t.id === formData.teamId);
+                if (!selectedTeam) return assigneeOptions || [];
+                const teamEmails = [...getTeamLeaders(selectedTeam), ...(selectedTeam.members || [])];
+                const teamPrefixes = teamEmails.map(e => formatEmailPrefix(e));
+                return (assigneeOptions || []).filter(a => teamPrefixes.includes(a));
+            }, [formData.teamId, teams, assigneeOptions]);
+
             return (
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-blue-100 mb-6">
                 <h3 className="font-bold text-lg mb-4 text-slate-700">{initialData ? '編輯事項' : '新增事項'}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">事項內容 <span className="text-red-500">*</span></label><input name="title" value={formData.title} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
                     <div className="col-span-2 md:col-span-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊</label>
+                        <select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2 border rounded">
+                            <option value="">不指定團隊</option>
+                            {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">負責人 <span className="text-red-500">*</span></label>
-                        <input
+                        <select
                             name="assignee"
                             value={formData.assignee}
                             onChange={handleChange}
                             className="w-full p-2 border rounded"
-                            list="assignee-options"
                             data-testid="assignee-input"
                             required
-                        />
-                        <datalist id="assignee-options">
-                            {(assigneeOptions || []).map((assignee) => (
-                                <option key={assignee} value={assignee} />
+                        >
+                            <option value="">請選擇負責人</option>
+                            {filteredAssignees.map((assignee) => (
+                                <option key={assignee} value={assignee}>{assignee}</option>
                             ))}
-                        </datalist>
+                        </select>
                     </div>
                     <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">來源 <span className="text-red-500">*</span></label><select name="source" value={formData.source} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇來源</option>{taskSources.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">狀態 <span className="text-red-500">*</span></label><select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
@@ -1117,8 +1134,8 @@
             );
         };
 
-        const MeetingForm = ({ initialData, onSave, onCancel, categories }) => {
-            const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], host: '', attendees: '', topic: '', content: '', category: categories[0] || '', ...initialData });
+        const MeetingForm = ({ initialData, onSave, onCancel, categories, teams = [] }) => {
+            const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], host: '', attendees: '', topic: '', content: '', category: categories[0] || '', teamId: '', ...initialData });
             const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
             const handleContentChange = (newContent) => setFormData(prev => ({ ...prev, content: newContent }));
             return (
@@ -1129,7 +1146,8 @@
                     <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">分類 <span className="text-red-500">*</span></label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇分類</option>{categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}</select></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">日期 <span className="text-red-500">*</span></label><input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">主持人 <span className="text-red-500">*</span></label><input name="host" value={formData.host} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
-                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">參會人員 <span className="text-red-500">*</span></label><input name="attendees" value={formData.attendees} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊</label><select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2 border rounded"><option value="">不指定團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">參會人員 <span className="text-red-500">*</span></label><input name="attendees" value={formData.attendees} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
                     <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center justify-between"><span>內容 (支援圖片貼上) <span className="text-red-500">*</span></span><span className="text-[10px] font-normal text-slate-400 flex items-center gap-1"><ImageIcon size={10}/> 貼上截圖會自動壓縮</span></label><ContentEditor value={formData.content} onChange={handleContentChange} /></div>
                 </div>
                 <div className="flex justify-end gap-3 mt-6"><button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">取消</button><button onClick={() => onSave(formData)} className="px-6 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-2"><Save size={18} /> 儲存</button></div>
@@ -1475,6 +1493,7 @@
             const [filterStatus, setFilterStatus] = useState('All');
             const [filterSource, setFilterSource] = useState('All');
             const [filterAssignee, setFilterAssignee] = useState('All');
+            const [filterTeam, setFilterTeam] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
             const [showAIModal, setShowAIModal] = useState(false);
 
@@ -1561,9 +1580,10 @@
                 if (filterStatus !== 'All') { res = res.filter(t => t.status === filterStatus); }
                 if (filterSource !== 'All') { res = res.filter(t => t.source === filterSource); }
                 if (filterAssignee !== 'All') { res = res.filter(t => t.assignee === filterAssignee || formatEmailPrefix(t.createdByEmail) === filterAssignee); }
+                if (filterTeam !== 'All') { res = res.filter(t => t.teamId === filterTeam); }
                 if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(t => t.title.toLowerCase().includes(lowerQ) || (t.assignee && t.assignee.toLowerCase().includes(lowerQ)) || (t.createdByEmail && t.createdByEmail.toLowerCase().includes(lowerQ))); }
                 setFilteredTasks(res);
-            }, [tasks, filterStatus, filterSource, filterAssignee, searchQuery]);
+            }, [tasks, filterStatus, filterSource, filterAssignee, filterTeam, searchQuery]);
 
             const handleGenerateReport = () => {
                 if (!filteredTasks.length) {
@@ -1633,6 +1653,7 @@
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-full sm:w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                         <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
                         <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{assigneeOptions.map(a => <option key={a} value={a}>{a}</option>)}</select>
+                        <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
                         {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                         <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm w-full sm:w-auto"><Download size={18} /> 匯出</button>
                         <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
@@ -1644,6 +1665,7 @@
                         taskSources={taskSources}
                         taskStatuses={taskStatuses}
                         assigneeOptions={assigneeOptions}
+                        teams={teams}
                         onSave={handleSave}
                         onCancel={() => setIsEditing(false)}
                     />
@@ -1665,7 +1687,7 @@
             );
         };
 
-        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey, canUseAI }) => {
+        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey, canUseAI, teams = [] }) => {
             const [meetings, setMeetings] = useState([]);
             const [filteredMeetings, setFilteredMeetings] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1674,6 +1696,7 @@
             const [modalConfig, setModalConfig] = useState({ isOpen: false });
             const [aiLoading, setAiLoading] = useState(false);
             const [filterCategory, setFilterCategory] = useState('All');
+            const [filterTeam, setFilterTeam] = useState('All');
             const [searchQuery, setSearchQuery] = useState('');
             const [showAIModal, setShowAIModal] = useState(false);
 
@@ -1702,9 +1725,10 @@
             useEffect(() => {
                 let res = meetings;
                 if (filterCategory !== 'All') { res = res.filter(m => m.category === filterCategory); }
+                if (filterTeam !== 'All') { res = res.filter(m => m.teamId === filterTeam); }
                 if (searchQuery.trim()) { const lowerQ = searchQuery.toLowerCase(); res = res.filter(m => m.topic.toLowerCase().includes(lowerQ) || m.host.toLowerCase().includes(lowerQ) || (m.createdByEmail && m.createdByEmail.toLowerCase().includes(lowerQ))); }
                 setFilteredMeetings(res);
-            }, [meetings, filterCategory, searchQuery]);
+            }, [meetings, filterCategory, filterTeam, searchQuery]);
 
             const handleGenerateMeetingReport = () => {
                 if (!filteredMeetings.length) {
@@ -1745,12 +1769,13 @@
                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
                         <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                         <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                        <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
                         {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                         <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
                     </div>
                 </div>
                 {isEditing ? (
-                    <MeetingForm initialData={currentMeeting} categories={categories} onSave={handleSave} onCancel={() => setIsEditing(false)} />
+                    <MeetingForm initialData={currentMeeting} categories={categories} teams={teams} onSave={handleSave} onCancel={() => setIsEditing(false)} />
                 ) : (
                     <div className="space-y-4">
                     {filteredMeetings.map(meeting => (
@@ -3125,7 +3150,7 @@
                                 teams={teams}
                             />
                         )}
-                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} />}
+                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} teams={teams} />}
                         {activeTab === 'settings' && (
                             canAccessSettings ? (
                                 <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} teams={teams} />
