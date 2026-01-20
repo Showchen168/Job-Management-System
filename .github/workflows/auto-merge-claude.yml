@@ -1,0 +1,40 @@
+name: Auto Merge Claude Branches
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Merge to main
+        run: |
+          echo "🔄 正在合併 ${{ github.ref_name }} 到 main..."
+          git checkout main
+          git pull origin main
+          git merge origin/${{ github.ref_name }} --no-edit -m "Auto merge: ${{ github.ref_name }} to main"
+          git push origin main
+          echo "✅ 合併完成！"
+
+      - name: Summary
+        run: |
+          echo "## 自動合併完成" >> $GITHUB_STEP_SUMMARY
+          echo "- 來源分支: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 目標分支: \`main\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 時間: $(date)" >> $GITHUB_STEP_SUMMARY
