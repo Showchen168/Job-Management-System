@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.13</title>
+    <title>工作紀錄中心 v2.9.14</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.13"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.14"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -221,7 +221,7 @@
             return filteredLines.join('\n');
         };
 
-        const callGeminiAI = async (contentParts, apiKey, model = 'gemini-2.0-flash') => {
+        const callGeminiAI = async (contentParts, apiKey, model = 'gemini-2.5-flash-preview-05-20') => {
             if (!apiKey) {
                 throw new Error("尚未設定 Gemini API Key，請至系統設定填寫。");
             }
@@ -711,7 +711,7 @@
         };
 
         // AI 對話 Modal 組件 (增強版 - 支援日期篩選和 Markdown 渲染)
-        const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, geminiModel = 'gemini-2.0-flash', dataType = 'tasks', onDateFilter }) => {
+        const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, geminiModel = 'gemini-2.5-flash-preview-05-20', dataType = 'tasks', onDateFilter }) => {
             const [userPrompt, setUserPrompt] = useState('');
             const [aiResponse, setAiResponse] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -1835,7 +1835,7 @@
             const [emailServiceError, setEmailServiceError] = useState('');
             const [isEmailServiceSaving, setIsEmailServiceSaving] = useState(false);
             const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('');
-            const [geminiModelInput, setGeminiModelInput] = useState('gemini-2.0-flash');
+            const [geminiModelInput, setGeminiModelInput] = useState('gemini-2.5-flash-preview-05-20');
             const [availableModels, setAvailableModels] = useState([]);
             const [isLoadingModels, setIsLoadingModels] = useState(false);
             const [isGeminiSaving, setIsGeminiSaving] = useState(false);
@@ -1928,7 +1928,7 @@
             }, [geminiApiKey]);
 
             useEffect(() => {
-                setGeminiModelInput(geminiModel || 'gemini-2.0-flash');
+                setGeminiModelInput(geminiModel || 'gemini-2.5-flash-preview-05-20');
             }, [geminiModel]);
 
             // 獲取可用的 Gemini 模型列表
@@ -2513,11 +2513,13 @@
                                             ))
                                         ) : (
                                             <>
-                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                                                <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview</option>
+                                                <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview</option>
+                                                <option value="gemini-2.5-flash-preview-05-20">Gemini 2.0 Flash</option>
+                                                <option value="gemini-2.5-flash-preview-05-20-lite">Gemini 2.0 Flash Lite</option>
+                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                                 <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                                 <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash 8B</option>
-                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                             </>
                                         )}
                                     </select>
@@ -2903,7 +2905,7 @@
             const [teams, setTeams] = useState([]);
             const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
             const [geminiApiKey, setGeminiApiKey] = useState('');
-            const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash');
+            const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-preview-05-20');
             const localeConvertersRef = useRef(null);
             const originalLocaleTextRef = useRef(new WeakMap());
             const isLocaleUpdatingRef = useRef(false);
@@ -3073,10 +3075,10 @@
                         if (docSnap.exists()) {
                             const data = docSnap.data();
                             setGeminiApiKey(data.apiKey || '');
-                            setGeminiModel(data.model || 'gemini-2.0-flash');
+                            setGeminiModel(data.model || 'gemini-2.5-flash-preview-05-20');
                         } else {
                             setGeminiApiKey('');
-                            setGeminiModel('gemini-2.0-flash');
+                            setGeminiModel('gemini-2.5-flash-preview-05-20');
                         }
                     },
                     (error) => {
