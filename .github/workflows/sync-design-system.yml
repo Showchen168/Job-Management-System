@@ -62,6 +62,8 @@ jobs:
                      -m "由 GitHub Actions 自動生成" \
                      -m "觸發: ${{ github.event_name }}" || echo "沒有需要提交的變更"
 
+          # 拉取最新變更以避免 non-fast-forward 錯誤
+          git pull --rebase origin main || git pull --rebase origin master || true
           git push
 
       - name: Create summary
