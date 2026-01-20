@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作紀錄中心 v2.9.12</title>
+    <title>工作紀錄中心 v2.9.13</title>
     
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,7 +105,7 @@
 
         // --- 0. System Constants ---
         const SYSTEM_CREATOR = "Show";
-        const APP_VERSION = "v2.9.12"; // 註冊頁面也移除信箱域名自動補全
+        const APP_VERSION = "v2.9.13"; // 註冊頁面也移除信箱域名自動補全
         const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
         const LOCALE_STORAGE_KEY = "jms-locale";
         const DEFAULT_LOCALE = "zh-Hant";
@@ -221,11 +221,11 @@
             return filteredLines.join('\n');
         };
 
-        const callGeminiAI = async (contentParts, apiKey) => {
+        const callGeminiAI = async (contentParts, apiKey, model = 'gemini-2.0-flash') => {
             if (!apiKey) {
                 throw new Error("尚未設定 Gemini API Key，請至系統設定填寫。");
             }
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
             try {
                 const response = await fetch(API_URL, {
                 method: 'POST',
@@ -711,7 +711,7 @@
         };
 
         // AI 對話 Modal 組件 (增強版 - 支援日期篩選和 Markdown 渲染)
-        const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, dataType = 'tasks', onDateFilter }) => {
+        const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, geminiModel = 'gemini-2.0-flash', dataType = 'tasks', onDateFilter }) => {
             const [userPrompt, setUserPrompt] = useState('');
             const [aiResponse, setAiResponse] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -830,7 +830,7 @@
                 ].join('\n');
 
                 try {
-                    const resultRaw = await callGeminiAI([{ text: fullPrompt }], geminiApiKey);
+                    const resultRaw = await callGeminiAI([{ text: fullPrompt }], geminiApiKey, geminiModel);
                     // 不使用 cleanAIResponse，保留 Markdown 格式
                     setAiResponse(resultRaw);
                 } catch (e) {
@@ -1486,7 +1486,7 @@
             );
         };
 
-        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, canUseAI, teams = [] }) => {
+        const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, geminiModel, canUseAI, teams = [] }) => {
             const [tasks, setTasks] = useState([]);
             const [filteredTasks, setFilteredTasks] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1652,6 +1652,7 @@
                     onClose={() => setShowAIModal(false)}
                     rawData={filteredTasks}
                     geminiApiKey={geminiApiKey}
+                    geminiModel={geminiModel}
                     dataType="tasks"
                 />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1695,7 +1696,7 @@
             );
         };
 
-        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey, canUseAI, teams = [] }) => {
+        const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiApiKey, geminiModel, canUseAI, teams = [] }) => {
             const [meetings, setMeetings] = useState([]);
             const [filteredMeetings, setFilteredMeetings] = useState([]);
             const [isEditing, setIsEditing] = useState(false);
@@ -1770,6 +1771,7 @@
                     onClose={() => setShowAIModal(false)}
                     rawData={filteredMeetings}
                     geminiApiKey={geminiApiKey}
+                    geminiModel={geminiModel}
                     dataType="meetings"
                 />
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1796,7 +1798,7 @@
             );
         };
 
-        const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiKey, testConfig, geminiApiKey, teams = [] }) => {
+        const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiSettings, testConfig, geminiApiKey, geminiModel, teams = [] }) => {
             const [newCategory, setNewCategory] = useState('');
             const [categories, setCategories] = useState([]);
             const [newTaskSource, setNewTaskSource] = useState('');
@@ -1833,6 +1835,9 @@
             const [emailServiceError, setEmailServiceError] = useState('');
             const [isEmailServiceSaving, setIsEmailServiceSaving] = useState(false);
             const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('');
+            const [geminiModelInput, setGeminiModelInput] = useState('gemini-2.0-flash');
+            const [availableModels, setAvailableModels] = useState([]);
+            const [isLoadingModels, setIsLoadingModels] = useState(false);
             const [isGeminiSaving, setIsGeminiSaving] = useState(false);
             const [isManualNotificationSending, setIsManualNotificationSending] = useState(false);
             const userTableColSpan = isAdmin ? 4 : 3;
@@ -1921,6 +1926,40 @@
             useEffect(() => {
                 setGeminiApiKeyInput(geminiApiKey || '');
             }, [geminiApiKey]);
+
+            useEffect(() => {
+                setGeminiModelInput(geminiModel || 'gemini-2.0-flash');
+            }, [geminiModel]);
+
+            // 獲取可用的 Gemini 模型列表
+            const fetchAvailableModels = async () => {
+                const apiKey = geminiApiKeyInput.trim();
+                if (!apiKey) {
+                    setAvailableModels([]);
+                    return;
+                }
+                setIsLoadingModels(true);
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+                    if (!response.ok) throw new Error('無法獲取模型列表');
+                    const data = await response.json();
+                    // 只顯示支援 generateContent 的模型
+                    const models = (data.models || [])
+                        .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+                        .map(m => ({
+                            id: m.name.replace('models/', ''),
+                            name: m.displayName || m.name.replace('models/', ''),
+                            description: m.description || ''
+                        }))
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                    setAvailableModels(models);
+                } catch (e) {
+                    console.error('獲取模型列表失敗:', e);
+                    setAvailableModels([]);
+                } finally {
+                    setIsLoadingModels(false);
+                }
+            };
 
             const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
                 if (!newItem.trim()) return;
@@ -2250,20 +2289,24 @@
                 }
             };
 
-            const handleSaveGeminiSettings = async () => {
+            const handleSaveGeminiSettingsLocal = async () => {
                 const trimmedKey = geminiApiKeyInput.trim();
                 if (!trimmedKey) {
                     setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請填寫 Gemini API Key", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
                     return;
                 }
+                if (!geminiModelInput) {
+                    setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "請選擇模型版本", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
+                    return;
+                }
                 setIsGeminiSaving(true);
                 try {
-                    await onSaveGeminiKey(trimmedKey);
+                    await onSaveGeminiSettings(trimmedKey, geminiModelInput);
                     setModalConfig({
                         isOpen: true,
                         type: 'confirm',
                         title: '成功',
-                        content: "Gemini API Key 已更新",
+                        content: "Gemini 設定已更新",
                         onConfirm: () => setModalConfig({ isOpen: false }),
                         confirmText: "好",
                         onCancel: null
@@ -2436,26 +2479,62 @@
                                     <p className="text-sm text-slate-500">提供 AI 報告與會議摘要服務</p>
                                 </div>
                             </div>
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gemini API Key</label>
-                                    <input
-                                        type="password"
-                                        value={geminiApiKeyInput}
-                                        onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="password"
+                                            value={geminiApiKeyInput}
+                                            onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                                            className="flex-1 p-2 border rounded"
+                                            placeholder="請輸入 Gemini API Key"
+                                            data-testid="gemini-api-key-input"
+                                        />
+                                        <button
+                                            onClick={fetchAvailableModels}
+                                            disabled={!geminiApiKeyInput.trim() || isLoadingModels}
+                                            className="px-3 py-2 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
+                                        >
+                                            {isLoadingModels ? '載入中...' : '偵測模型'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">模型版本</label>
+                                    <select
+                                        value={geminiModelInput}
+                                        onChange={(e) => setGeminiModelInput(e.target.value)}
                                         className="w-full p-2 border rounded"
-                                        placeholder="請輸入 Gemini API Key"
-                                        data-testid="gemini-api-key-input"
-                                    />
+                                    >
+                                        {availableModels.length > 0 ? (
+                                            availableModels.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                                <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash 8B</option>
+                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                            </>
+                                        )}
+                                    </select>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {availableModels.length > 0
+                                            ? `已偵測到 ${availableModels.length} 個可用模型`
+                                            : '輸入 API Key 後點擊「偵測模型」可獲取完整模型列表'}
+                                    </p>
                                 </div>
                                 <div className="flex justify-end">
                                     <button
-                                        onClick={handleSaveGeminiSettings}
+                                        onClick={handleSaveGeminiSettingsLocal}
                                         className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                         disabled={(!db && !testConfig.enabled) || isGeminiSaving}
                                         data-testid="gemini-api-key-save-button"
                                     >
-                                        {isGeminiSaving ? '儲存中...' : '儲存 Gemini API Key'}
+                                        {isGeminiSaving ? '儲存中...' : '儲存 Gemini 設定'}
                                     </button>
                                 </div>
                             </div>
@@ -2824,6 +2903,7 @@
             const [teams, setTeams] = useState([]);
             const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
             const [geminiApiKey, setGeminiApiKey] = useState('');
+            const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash');
             const localeConvertersRef = useRef(null);
             const originalLocaleTextRef = useRef(new WeakMap());
             const isLocaleUpdatingRef = useRef(false);
@@ -2991,9 +3071,12 @@
                     geminiRef,
                     (docSnap) => {
                         if (docSnap.exists()) {
-                            setGeminiApiKey(docSnap.data().apiKey || '');
+                            const data = docSnap.data();
+                            setGeminiApiKey(data.apiKey || '');
+                            setGeminiModel(data.model || 'gemini-2.0-flash');
                         } else {
                             setGeminiApiKey('');
+                            setGeminiModel('gemini-2.0-flash');
                         }
                     },
                     (error) => {
@@ -3046,15 +3129,17 @@
                 return 'bg-slate-400';
             }, [connectionStatus]);
 
-            const handleSaveGeminiKey = async (key) => {
+            const handleSaveGeminiSettings = async (key, model) => {
                 if (testConfig.enabled || !db) {
                     setGeminiApiKey(key);
+                    setGeminiModel(model);
                     return;
                 }
                 await setDoc(
                     doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'gemini'),
                     {
                         apiKey: key,
+                        model: model,
                         updatedAt: serverTimestamp(),
                         updatedBy: user?.email || null
                     },
@@ -3154,14 +3239,15 @@
                                 isAdmin={isUserAdmin}
                                 testConfig={testConfig}
                                 geminiApiKey={geminiApiKey}
+                                geminiModel={geminiModel}
                                 canUseAI={isUserCanUseAI}
                                 teams={teams}
                             />
                         )}
-                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} canUseAI={isUserCanUseAI} teams={teams} />}
+                        {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} teams={teams} />}
                         {activeTab === 'settings' && (
                             canAccessSettings ? (
-                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiKey={handleSaveGeminiKey} testConfig={testConfig} geminiApiKey={geminiApiKey} teams={teams} />
+                                <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                     <ShieldAlert size={48} className="mb-4" />
