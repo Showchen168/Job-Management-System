@@ -1,6 +1,6 @@
-import fs from 'fs';
-import { test, expect } from '@playwright/test';
-import { chromium } from 'playwright';
+const fs = require('fs');
+const { test, expect } = require('@playwright/test');
+const { chromium } = require('playwright');
 
 const hasBrowser = fs.existsSync(chromium.executablePath());
 test.skip(!hasBrowser, 'Playwright 瀏覽器未安裝');

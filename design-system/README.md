@@ -1,6 +1,6 @@
 # 設計系統 Design System
 
-> 自動同步自「工作紀錄中心」v3.0.0 - 最後更新: 2026-01-22
+> 自動同步自「工作紀錄中心」v1.0.0 - 最後更新: 2026-01-20
 
 ## 目錄結構
 
@@ -62,19 +62,19 @@ import {
 - 更新設計規範文件
 - 生成同步報告
 
-## 源專案元件 (32 個)
+## 源專案元件 (15 個)
 
+- AIConversationModal
 - AuthPage
-- Badge
-- Button
-- Card
-- CardWithHeader
-- ConfirmModal
-- Content
+- ContentEditor
+- CopyButton
 - Dashboard
-- FilterBar
-- Grid
-- ... 等共 32 個
+- MarkdownRenderer
+- MeetingForm
+- MeetingMinutes
+- MeetingRow
+- Modal
+- ... 等共 15 個
 
 ---
 

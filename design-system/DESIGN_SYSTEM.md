@@ -1,6 +1,6 @@
 # 設計系統規範 Design System
 
-> 自動從主專案同步生成 - 最後更新: 2026-01-22 (v3.0.0)
+> 自動從主專案同步生成 - 最後更新: 2026-01-20 (v1.0.0)
 
 基於「工作紀錄中心」專案的 UX/UI 設計規範，供後續專案參考使用。
 
@@ -20,14 +20,14 @@
 
 ### 目前使用的顏色
 
-**背景色 (22 種)**
-`bg-amber-500`, `bg-blue-100`, `bg-blue-50`, `bg-blue-600`, `bg-blue-700`, `bg-cyan-100`, `bg-emerald-600`, `bg-emerald-700`, `bg-gray-100`, `bg-green-100`, `bg-purple-100`, `bg-red-100`, `bg-red-50`, `bg-red-500`, `bg-red-600`, `bg-red-700`, `bg-slate-100`, `bg-slate-300`, `bg-slate-50`, `bg-slate-800`...
+**背景色 (46 種)**
+`bg-amber-100`, `bg-amber-400`, `bg-blue-100`, `bg-blue-50`, `bg-blue-500`, `bg-blue-600`, `bg-blue-700`, `bg-emerald-100`, `bg-emerald-400`, `bg-emerald-50`, `bg-emerald-500`, `bg-emerald-600`, `bg-emerald-700`, `bg-gray-100`, `bg-gray-50`, `bg-green-100`, `bg-green-50`, `bg-indigo-100`, `bg-indigo-600`, `bg-indigo-700`...
 
-**文字色 (18 種)**
-`text-blue-600`, `text-blue-700`, `text-cyan-700`, `text-emerald-600`, `text-gray-700`, `text-green-700`, `text-purple-600`, `text-purple-700`, `text-red-500`, `text-red-600`, `text-red-700`, `text-slate-300`, `text-slate-400`, `text-slate-500`, `text-slate-600`, `text-slate-700`, `text-slate-800`, `text-yellow-700`
+**文字色 (36 種)**
+`text-amber-700`, `text-blue-400`, `text-blue-500`, `text-blue-600`, `text-blue-700`, `text-blue-800`, `text-blue-900`, `text-emerald-600`, `text-emerald-700`, `text-gray-700`, `text-green-600`, `text-green-700`, `text-green-800`, `text-indigo-700`, `text-purple-600`, `text-purple-700`, `text-purple-900`, `text-red-500`, `text-red-600`, `text-red-700`...
 
-**邊框色 (12 種)**
-`border-blue-200`, `border-cyan-200`, `border-gray-200`, `border-green-200`, `border-purple-200`, `border-red-200`, `border-red-500`, `border-slate-100`, `border-slate-200`, `border-slate-300`, `border-slate-700`, `border-yellow-200`
+**邊框色 (16 種)**
+`border-blue-200`, `border-blue-300`, `border-emerald-100`, `border-gray-200`, `border-green-200`, `border-purple-200`, `border-purple-300`, `border-red-200`, `border-slate-100`, `border-slate-200`, `border-slate-300`, `border-slate-700`, `border-teal-200`, `border-teal-300`, `border-yellow-200`, `border-yellow-300`
 
 ---
 
@@ -120,40 +120,23 @@ font-family: 'Inter', 'Microsoft JhengHei', sans-serif;
 
 ## 6. 目前專案元件列表
 
-共 32 個元件：
+共 15 個元件：
 
+- `AIConversationModal`
 - `AuthPage`
-- `Badge`
-- `Button`
-- `Card`
-- `CardWithHeader`
-- `ConfirmModal`
-- `Content`
+- `ContentEditor`
+- `CopyButton`
 - `Dashboard`
-- `FilterBar`
-- `Grid`
-- `Input`
-- `Layout`
+- `MarkdownRenderer`
+- `MeetingForm`
+- `MeetingMinutes`
+- `MeetingRow`
 - `Modal`
 - `NavButton`
-- `PageContainer`
-- `PageHeader`
-- `RoleBadge`
-- `Search`
-- `Select`
 - `SettingsPage`
-- `Sidebar`
-- `StatCard`
-- `StatusBadge`
-- `Table`
-- `TableBody`
-- `TableCell`
-- `TableEmpty`
-- `TableHead`
-- `TableHeader`
-- `TableRow`
+- `TaskForm`
 - `TaskManager`
-- `Textarea`
+- `TaskRow`
 
 ---
 
