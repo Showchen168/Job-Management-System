@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+body {
+  background-color: #f8fafc;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: #64748b;
+  font-family: sans-serif;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.error-box {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #fca5a5;
+  z-index: 9999;
+  max-width: 90%;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
