@@ -1,6 +1,6 @@
 # 功能模式 Functional Patterns
 
-> 自動同步自「工作紀錄中心」v1.0.0 - 最後更新: 2026-01-20
+> 自動同步自「工作紀錄中心」v3.0.0 - 最後更新: 2026-01-22
 
 本文件記錄主專案中可重用的功能模式，供其他專案參考實作。
 
@@ -11,10 +11,10 @@
 | 模組 | 功能數量 | 說明 |
 |------|----------|------|
 | 身份驗證 | 4 | Firebase Auth 整合 |
-| 權限管理 | 5 | 多角色權限系統 |
-| 團隊管理 | 3 | 團隊協作功能 |
-| AI 整合 | 3 | Gemini API 整合 |
-| 通用工具 | 5 | 常用工具函數 |
+| 權限管理 | 2 | 多角色權限系統 |
+| 團隊管理 | 0 | 團隊協作功能 |
+| AI 整合 | 0 | Gemini API 整合 |
+| 通用工具 | 1 | 常用工具函數 |
 
 ---
 
@@ -47,10 +47,7 @@ onAuthStateChanged(auth, (user) => { /* ... */ });
 
 ### 支援功能
 - Admin 權限檢查
-- Editor 權限檢查
-- Leader 權限檢查
 - Root Admin 機制
-- 權限管理工具
 
 ### 權限層級
 | 層級 | 角色 | 權限說明 |
@@ -73,9 +70,7 @@ const canAccessAll = isAdmin || isEditor;
 ## 3. 團隊管理 (Team Management)
 
 ### 支援功能
-- 取得團隊 Leader
-- 取得團隊成員
-- Leader 身份檢查
+
 
 ### 資料結構
 ```javascript
@@ -98,9 +93,7 @@ const teamMembers = getLeaderTeamMembers(user, teams);
 ## 4. AI 整合 (AI Integration)
 
 ### 支援功能
-- Gemini API 呼叫
-- 圖片內容提取
-- AI 對話介面
+
 
 ### 使用方式
 ```javascript
@@ -116,11 +109,7 @@ const result = await callGeminiAI(
 ## 5. 通用工具 (Utilities)
 
 ### 支援功能
-- 剪貼簿複製
-- CSV 匯出
-- 圖片壓縮
 - 日期格式化
-- Word 文件下載
 
 ---
 

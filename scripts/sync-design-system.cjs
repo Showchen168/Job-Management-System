@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Design System Full Sync Script
- * 自動從 index.html 提取設計模式並完整更新 design-system
+ * 自動從 src/ 目錄提取設計模式並完整更新 design-system
  *
  * 功能：
  * - 自動更新 components/*.jsx
@@ -10,7 +10,7 @@
  * - 自動更新 README.md
  * - 生成 version.json 和 SYNC_REPORT.md
  *
- * 使用方式: node scripts/sync-design-system.js
+ * 使用方式: node scripts/sync-design-system.cjs
  */
 
 const fs = require('fs');
@@ -18,7 +18,10 @@ const path = require('path');
 
 // 路徑設定
 const ROOT_DIR = path.join(__dirname, '..');
-const INDEX_HTML = path.join(ROOT_DIR, 'index.html');
+const SRC_DIR = path.join(ROOT_DIR, 'src');
+const INDEX_CSS = path.join(SRC_DIR, 'index.css');
+const APP_JSX = path.join(SRC_DIR, 'App.jsx');
+const COMPONENTS_SRC_DIR = path.join(SRC_DIR, 'components');
 const DESIGN_SYSTEM_DIR = path.join(ROOT_DIR, 'design-system');
 const COMPONENTS_DIR = path.join(DESIGN_SYSTEM_DIR, 'components');
 const STARTER_TEMPLATE = path.join(DESIGN_SYSTEM_DIR, 'starter-template', 'index.html');
@@ -1614,15 +1617,51 @@ ${components.length > 10 ? `- ... 等共 ${components.length} 個` : ''}
 }
 
 // ============================================
+// 讀取 src 目錄所有檔案
+// ============================================
+
+function readAllSrcFiles() {
+    let allContent = '';
+
+    // 讀取 App.jsx
+    const appContent = readFile(APP_JSX);
+    if (appContent) {
+        allContent += appContent + '\n';
+    }
+
+    // 讀取 index.css
+    const cssContent = readFile(INDEX_CSS);
+    if (cssContent) {
+        allContent += cssContent + '\n';
+    }
+
+    // 讀取 src/components 目錄下的所有 jsx 檔案
+    if (fs.existsSync(COMPONENTS_SRC_DIR)) {
+        const files = fs.readdirSync(COMPONENTS_SRC_DIR);
+        for (const file of files) {
+            if (file.endsWith('.jsx') || file.endsWith('.js')) {
+                const content = readFile(path.join(COMPONENTS_SRC_DIR, file));
+                if (content) {
+                    allContent += content + '\n';
+                }
+            }
+        }
+    }
+
+    return allContent;
+}
+
+// ============================================
 // 主函數
 // ============================================
 
 function main() {
     console.log('🔄 開始完整同步 Design System...\n');
 
-    const sourceContent = readFile(INDEX_HTML);
+    // 從 src/ 目錄讀取所有檔案內容
+    const sourceContent = readAllSrcFiles();
     if (!sourceContent) {
-        console.error('無法讀取 index.html');
+        console.error('無法讀取 src/ 目錄檔案');
         process.exit(1);
     }
 
@@ -1726,7 +1765,7 @@ function main() {
 - 通用工具: ${patterns.utilities.length} 項
 
 ---
-*由 sync-design-system.js 自動生成*
+*由 sync-design-system.cjs 自動生成*
 `;
     writeFile(path.join(DESIGN_SYSTEM_DIR, 'SYNC_REPORT.md'), report);
 
@@ -1734,3 +1773,4 @@ function main() {
 }
 
 main();
+

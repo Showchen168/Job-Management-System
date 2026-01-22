@@ -1,13 +1,13 @@
-const { defineConfig } = require('@playwright/test');
+import { defineConfig } from '@playwright/test';
 
-module.exports = defineConfig({
+export default defineConfig({
   testDir: './tests/e2e',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'http://localhost:4173',
     headless: true
   },
   webServer: {
-    command: 'python -m http.server 4173',
+    command: 'npm run preview',
     port: 4173,
     reuseExistingServer: true,
     timeout: 120000

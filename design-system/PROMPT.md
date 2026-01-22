@@ -1,6 +1,6 @@
 # AI 提示詞指南 Prompt Guide
 
-> 自動同步自「工作紀錄中心」v1.0.0 - 最後更新: 2026-01-20
+> 自動同步自「工作紀錄中心」v3.0.0 - 最後更新: 2026-01-22
 
 本文件提供在其他專案中引用此設計系統和功能模式的標準提示詞。
 
@@ -76,25 +76,25 @@ https://github.com/Showchen168/Job-Management-System/tree/main/design-system
 
 ## 目前可用資源
 
-### 元件庫 (15 個源元件)
-- AIConversationModal
+### 元件庫 (32 個源元件)
 - AuthPage
-- ContentEditor
-- CopyButton
+- Badge
+- Button
+- Card
+- CardWithHeader
+- ConfirmModal
+- Content
 - Dashboard
-- MarkdownRenderer
-- MeetingForm
-- MeetingMinutes
-- MeetingRow
-- Modal
-- ... 等共 15 個
+- FilterBar
+- Grid
+- ... 等共 32 個
 
 ### 功能模式
 - 身份驗證: 4 項
-- 權限管理: 5 項
-- 團隊管理: 3 項
-- AI 整合: 3 項
-- 通用工具: 5 項
+- 權限管理: 2 項
+- 團隊管理: 0 項
+- AI 整合: 0 項
+- 通用工具: 1 項
 
 ---
 
