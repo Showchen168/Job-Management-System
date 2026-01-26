@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.2"; // 修正團隊成員重複顯示問題
+const APP_VERSION = "v1.0.3"; // 團隊選擇只顯示用戶所屬團隊
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -1017,10 +1017,17 @@ const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses, as
                         <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">事項內容 <span className="text-red-500">*</span></label><input name="title" value={formData.title} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required /></div>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊 <span className="text-red-500">*</span></label>
-                            <select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
-                                <option value="" disabled>請選擇團隊</option>
-                                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
+                            {teams.length > 0 ? (
+                                <select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                                    <option value="" disabled>請選擇團隊</option>
+                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                            ) : (
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <p className="text-sm text-amber-800">您尚未被加入任何團隊</p>
+                                    <p className="text-xs text-amber-600 mt-1">請聯繫 <strong>Doris Kuo</strong> 或 <strong>Team Leader</strong></p>
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">負責人 <span className="text-red-500">*</span></label>
@@ -1085,7 +1092,7 @@ const MeetingForm = ({ initialData, onSave, onCancel, categories, teams = [] }) 
             <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">分類 <span className="text-red-500">*</span></label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇分類</option>{categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}</select></div>
             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">日期 <span className="text-red-500">*</span></label><input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">主持人 <span className="text-red-500">*</span></label><input name="host" value={formData.host} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
-            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊</label><select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2 border rounded"><option value="">不指定團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">所屬團隊</label>{teams.length > 0 ? (<select name="teamId" value={formData.teamId} onChange={handleChange} className="w-full p-2 border rounded"><option value="">不指定團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>) : (<div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">尚未加入團隊，請聯繫 Doris Kuo 或 Team Leader</div>)}</div>
             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">參會人員 <span className="text-red-500">*</span></label><input name="attendees" value={formData.attendees} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
             <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center justify-between"><span>內容 (支援圖片貼上) <span className="text-red-500">*</span></span><span className="text-[10px] font-normal text-slate-400 flex items-center gap-1"><ImageIcon size={10}/> 貼上截圖會自動壓縮</span></label><ContentEditor value={formData.content} onChange={handleContentChange} /></div>
         </div>
@@ -1440,6 +1447,18 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
     const teamMemberEmails = useMemo(() => getLeaderTeamMembers(user, teams), [user, teams]);
 
+    // 計算用戶可選擇的團隊（Admin/Editor 可看全部，其他人只能選自己所屬的團隊）
+    const userSelectableTeams = useMemo(() => {
+        if (canAccessAll) return teams; // Admin/Editor 可選所有團隊
+        if (!user?.email) return [];
+        const userEmail = user.email.toLowerCase();
+        return teams.filter(team => {
+            const leaders = getTeamLeaders(team).map(l => l.toLowerCase());
+            const members = (team.members || []).map(m => m.toLowerCase());
+            return leaders.includes(userEmail) || members.includes(userEmail);
+        });
+    }, [canAccessAll, user, teams]);
+
     useEffect(() => {
         if (!db || !user) return;
 
@@ -1617,7 +1636,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 taskSources={taskSources}
                 taskStatuses={taskStatuses}
                 assigneeOptions={assigneeOptions}
-                teams={teams}
+                teams={userSelectableTeams}
                 onSave={handleSave}
                 onCancel={() => setIsEditing(false)}
             />
@@ -1651,6 +1670,18 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
     const [filterTeam, setFilterTeam] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [showAIModal, setShowAIModal] = useState(false);
+
+    // 計算用戶可選擇的團隊（Admin/Editor 可看全部，其他人只能選自己所屬的團隊）
+    const userSelectableTeams = useMemo(() => {
+        if (canAccessAll) return teams;
+        if (!user?.email) return [];
+        const userEmail = user.email.toLowerCase();
+        return teams.filter(team => {
+            const leaders = getTeamLeaders(team).map(l => l.toLowerCase());
+            const members = (team.members || []).map(m => m.toLowerCase());
+            return leaders.includes(userEmail) || members.includes(userEmail);
+        });
+    }, [canAccessAll, user, teams]);
 
     useEffect(() => {
         if (!db || !user) return;
@@ -1728,7 +1759,7 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
             </div>
         </div>
         {isEditing && (
-            <MeetingForm initialData={currentMeeting} categories={categories} teams={teams} onSave={handleSave} onCancel={() => setIsEditing(false)} />
+            <MeetingForm initialData={currentMeeting} categories={categories} teams={userSelectableTeams} onSave={handleSave} onCancel={() => setIsEditing(false)} />
         )}
         <div className="space-y-4">
             {filteredMeetings.map(meeting => (
