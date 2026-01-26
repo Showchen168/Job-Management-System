@@ -89,6 +89,17 @@ const getLeaderTeamMembers = (user, teams = []) => {
     return Array.from(memberEmails);
 };
 
+// 檢查用戶是否屬於任何團隊（作為成員或 Leader）
+const checkIsInAnyTeam = (user, teams = []) => {
+    if (!user || !user.email) return false;
+    const userEmail = user.email.toLowerCase();
+    return teams.some(team => {
+        const leaders = getTeamLeaders(team).map(l => l.toLowerCase());
+        const members = (team.members || []).map(m => m.toLowerCase());
+        return leaders.includes(userEmail) || members.includes(userEmail);
+    });
+};
+
 const formatEmailPrefix = (email) => {
     if (!email) return '使用者';
     const [prefix] = email.split('@');
@@ -1442,13 +1453,25 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             // 非管理員/編輯者需要篩選
             if (!canAccessAll) {
                 if (isLeader && teamMemberEmails.length > 0) {
-                    // Leader: 自己的 + 成員的任務 + 被指派給自己的任務
-                    data = data.filter(task =>
-                        task.createdByEmail === user.email ||
-                        task.assignee === userEmailPrefix ||
-                        teamMemberEmails.includes(task.createdByEmail) ||
-                        teamMemberEmails.map(e => formatEmailPrefix(e)).includes(task.assignee)
-                    );
+                    // Leader: 只能看到自己的任務 + 團隊成員的任務
+                    // 不能看到其他 Leader 建立的任務（即使指派給自己的成員）
+                    data = data.filter(task => {
+                        const isOwnTask = task.createdByEmail === user.email;
+                        const isAssignedToMe = task.assignee === userEmailPrefix;
+                        const isCreatedByMember = teamMemberEmails.includes(task.createdByEmail);
+                        const isAssignedToMember = teamMemberEmails.map(e => formatEmailPrefix(e)).includes(task.assignee);
+
+                        // 自己建立的任務
+                        if (isOwnTask) return true;
+                        // 指派給自己的任務（只有當建立者是自己或成員時）
+                        if (isAssignedToMe && (isOwnTask || isCreatedByMember)) return true;
+                        // 成員建立的任務
+                        if (isCreatedByMember) return true;
+                        // 自己建立並指派給成員的任務
+                        if (isOwnTask && isAssignedToMember) return true;
+
+                        return false;
+                    });
                 } else {
                     // 一般用戶: 自己建立的 + 被指派給自己的任務
                     data = data.filter(task =>
@@ -1914,12 +1937,43 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
         if (!db || !userToDelete?.docId) return;
         setModalConfig({ isOpen: false });
         try {
+            const userEmail = userToDelete.email.toLowerCase();
+
+            // 1. 刪除用戶註冊資料
             await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', userToDelete.docId));
+
+            // 2. 從團隊中移除（leaderIds 和 members）
+            const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
+            const teamsSnapshot = await getDoc(teamsRef);
+            if (teamsSnapshot.exists()) {
+                const currentTeams = teamsSnapshot.data().list || [];
+                const updatedTeams = currentTeams.map(team => ({
+                    ...team,
+                    leaderIds: (team.leaderIds || []).filter(id => id.toLowerCase() !== userEmail),
+                    members: (team.members || []).filter(m => m.toLowerCase() !== userEmail)
+                }));
+                await setDoc(teamsRef, { list: updatedTeams }, { merge: true });
+            }
+
+            // 3. 從權限列表中移除（admins, editors, aiUsers）
+            const permissionTypes = ['admins', 'editors', 'aiUsers'];
+            for (const type of permissionTypes) {
+                const permRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', type);
+                const permSnapshot = await getDoc(permRef);
+                if (permSnapshot.exists()) {
+                    const currentList = permSnapshot.data().list || [];
+                    const updatedList = currentList.filter(e => e.toLowerCase() !== userEmail);
+                    if (currentList.length !== updatedList.length) {
+                        await setDoc(permRef, { list: updatedList }, { merge: true });
+                    }
+                }
+            }
+
             setModalConfig({
                 isOpen: true,
                 type: 'confirm',
                 title: '刪除成功',
-                content: `已刪除 ${formatEmailPrefix(userToDelete.email)} 的註冊資料。`,
+                content: `已刪除 ${formatEmailPrefix(userToDelete.email)} 的所有資料（包含團隊和權限）。`,
                 onConfirm: () => setModalConfig({ isOpen: false }),
                 confirmText: "好",
                 onCancel: null
@@ -3074,6 +3128,41 @@ const App = () => {
 
     if (!user) {
         return <AuthPage auth={auth} error={error} connectionStatus={connectionStatus} />;
+    }
+
+    // 新用戶等待配置團隊視窗
+    const isNewUserWithoutTeam = !isUserAdmin && !isUserEditor && !checkIsInAnyTeam(user, teams);
+    if (isNewUserWithoutTeam && teams.length > 0) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+                <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center border border-slate-200">
+                    <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Clock size={40} className="text-blue-600" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-4">等待團隊配置</h2>
+                    <p className="text-slate-600 mb-6 leading-relaxed">
+                        您的帳號 <span className="font-semibold text-blue-600">{formatEmailPrefix(user.email)}</span> 尚未被分配到任何團隊。
+                    </p>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                        <p className="text-amber-800 text-sm">
+                            <strong>請聯繫系統管理員：</strong><br />
+                            <span className="text-amber-700">Doris Kuo</span>
+                        </p>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-6">系統管理員會盡快為您配置團隊權限</p>
+                    {!testConfig.enabled && auth && (
+                        <button
+                            onClick={() => signOut(auth)}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition font-medium"
+                        >
+                            <LogOut size={18} />
+                            登出
+                        </button>
+                    )}
+                </div>
+                <p className="text-xs text-slate-400 mt-6">System Creator: {SYSTEM_CREATOR} | Version: {APP_VERSION}</p>
+            </div>
+        );
     }
 
     return (
