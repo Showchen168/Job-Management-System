@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.3"; // 團隊選擇只顯示用戶所屬團隊
+const APP_VERSION = "v1.0.4"; // 限制篩選權限，Leader 看不到已註冊使用者列表
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -2456,7 +2456,8 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
         <div className="max-w-3xl mx-auto space-y-8 pb-12">
             <Modal {...modalConfig} />
             
-            {/* User Registry List */}
+            {/* User Registry List - Admin/Editor Only */}
+            {(isAdmin || isEditor) && (
             <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="registered-users">
                 <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
                 <div className="overflow-x-auto">
@@ -2509,6 +2510,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                     </table>
                 </div>
             </div>
+            )}
 
             {/* Gemini Settings - Admin Only */}
             {isAdmin && (
