@@ -2958,7 +2958,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
 // --- 4. Main App Component (Must be last) ---
 
 const App = () => {
-    const [activeTab, setActiveTab] = useState('tasks'); 
+    const [activeTab, setActiveTab] = useState('dashboard');
     const [appInstance, setAppInstance] = useState(null);
     const [db, setDb] = useState(null);
     const [auth, setAuth] = useState(null);
