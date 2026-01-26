@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.1"; // 修正團隊成員顯示問題
+const APP_VERSION = "v1.0.2"; // 修正團隊成員重複顯示問題
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -2187,14 +2187,14 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
             setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "團隊名稱不能為空", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null });
             return;
         }
-        const memberList = editTeamMembers
+        const memberList = [...new Set(editTeamMembers
             .split(',')
             .map(m => normalizePermissionEmail(m.trim()))
-            .filter(Boolean);
-        const leaderList = editTeamLeader
+            .filter(Boolean))];
+        const leaderList = [...new Set(editTeamLeader
             .split(',')
             .map(l => normalizePermissionEmail(l.trim()))
-            .filter(Boolean);
+            .filter(Boolean))];
 
         const teamsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'teams');
         try {
@@ -2846,7 +2846,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                 </div>
                                             </div>
                                             <div className="flex flex-wrap gap-1">
-                                                {team.members && team.members.length > 0 ? team.members.map(m => (
+                                                {team.members && team.members.length > 0 ? [...new Set(team.members)].map(m => (
                                                     <span key={m} className="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-full">{formatEmailPrefix(m)}</span>
                                                 )) : <span className="text-xs text-slate-400">尚無成員</span>}
                                             </div>
