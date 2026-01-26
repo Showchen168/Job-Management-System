@@ -1,5 +1,5 @@
 {
-  "lastSync": "2026-01-20T09:18:52.918Z",
+  "lastSync": "2026-01-26T07:24:36.148Z",
   "sourceVersion": "v1.0.0",
   "componentsCount": 15,
   "components": [
@@ -23,6 +23,7 @@
     "bg": [
       "amber-100",
       "amber-400",
+      "amber-50",
       "blue-100",
       "blue-50",
       "blue-500",
@@ -70,6 +71,7 @@
     ],
     "text": [
       "amber-700",
+      "amber-800",
       "blue-400",
       "blue-500",
       "blue-600",
@@ -107,6 +109,7 @@
       "yellow-900"
     ],
     "border": [
+      "amber-200",
       "blue-200",
       "blue-300",
       "emerald-100",

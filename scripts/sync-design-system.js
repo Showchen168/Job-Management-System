@@ -18,10 +18,7 @@ const path = require('path');
 
 // 路徑設定
 const ROOT_DIR = path.join(__dirname, '..');
-const SRC_DIR = path.join(ROOT_DIR, 'src');
-const INDEX_CSS = path.join(SRC_DIR, 'index.css');
-const APP_JSX = path.join(SRC_DIR, 'App.jsx');
-const COMPONENTS_SRC_DIR = path.join(SRC_DIR, 'components');
+const INDEX_HTML = path.join(ROOT_DIR, 'index.html'); // v1.0.0 使用單一 index.html
 const DESIGN_SYSTEM_DIR = path.join(ROOT_DIR, 'design-system');
 const COMPONENTS_DIR = path.join(DESIGN_SYSTEM_DIR, 'components');
 const STARTER_TEMPLATE = path.join(DESIGN_SYSTEM_DIR, 'starter-template', 'index.html');
@@ -1617,38 +1614,16 @@ ${components.length > 10 ? `- ... 等共 ${components.length} 個` : ''}
 }
 
 // ============================================
-// 讀取 src 目錄所有檔案
+// 讀取源檔案 (v1.0.0 使用 index.html)
 // ============================================
 
-function readAllSrcFiles() {
-    let allContent = '';
-
-    // 讀取 App.jsx
-    const appContent = readFile(APP_JSX);
-    if (appContent) {
-        allContent += appContent + '\n';
+function readSourceContent() {
+    // v1.0.0: 直接從 index.html 讀取所有內容
+    const content = readFile(INDEX_HTML);
+    if (content) {
+        return content;
     }
-
-    // 讀取 index.css
-    const cssContent = readFile(INDEX_CSS);
-    if (cssContent) {
-        allContent += cssContent + '\n';
-    }
-
-    // 讀取 src/components 目錄下的所有 jsx 檔案
-    if (fs.existsSync(COMPONENTS_SRC_DIR)) {
-        const files = fs.readdirSync(COMPONENTS_SRC_DIR);
-        for (const file of files) {
-            if (file.endsWith('.jsx') || file.endsWith('.js')) {
-                const content = readFile(path.join(COMPONENTS_SRC_DIR, file));
-                if (content) {
-                    allContent += content + '\n';
-                }
-            }
-        }
-    }
-
-    return allContent;
+    return '';
 }
 
 // ============================================
@@ -1658,10 +1633,10 @@ function readAllSrcFiles() {
 function main() {
     console.log('🔄 開始完整同步 Design System...\n');
 
-    // 從 src/ 目錄讀取所有檔案內容
-    const sourceContent = readAllSrcFiles();
+    // 從 index.html 讀取所有內容 (v1.0.0)
+    const sourceContent = readSourceContent();
     if (!sourceContent) {
-        console.error('無法讀取 src/ 目錄檔案');
+        console.error('無法讀取 index.html');
         process.exit(1);
     }
 
