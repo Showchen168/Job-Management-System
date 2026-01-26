@@ -7,20 +7,10 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
 
 jobs:
-  merge-build-deploy:
+  auto-merge:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,36 +31,13 @@ jobs:
           git merge origin/${{ github.ref_name }} --no-edit -m "Auto merge: ${{ github.ref_name }} to main"
           git push origin main
           echo "✅ 合併完成！"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build
-        run: npm run build
-        env:
-          NODE_ENV: production
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "📦 deploy.yml 將自動觸發構建和部署..."
 
       - name: Summary
         run: |
-          echo "## 自動合併並部署完成" >> $GITHUB_STEP_SUMMARY
+          echo "## 自動合併完成" >> $GITHUB_STEP_SUMMARY
           echo "- 來源分支: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- 目標分支: \`main\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 部署網址: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
           echo "- 時間: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ deploy.yml 將自動觸發構建和部署" >> $GITHUB_STEP_SUMMARY

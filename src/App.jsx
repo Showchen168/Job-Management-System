@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.6"; // 更新聯繫人備注
+const APP_VERSION = "v1.0.8"; // 修正自動部署問題
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -1832,6 +1832,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const [modalConfig, setModalConfig] = useState({ isOpen: false });
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
     const canEditDropdowns = isAdmin || isEditor || isLeader;
+    const canEditTaskStatuses = isAdmin || isEditor; // 待辦狀態不開放給 Leader
     const canEditTeams = isAdmin || isEditor;
     const canViewTeamPanel = isAdmin || isEditor || isLeader;
     const [allUsers, setAllUsers] = useState([]);
@@ -2945,11 +2946,11 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                 <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
             </div>
 
-            {/* Global Options: Task Statuses */}
+            {/* Global Options: Task Statuses - Admin/Editor Only */}
             <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-indigo-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
-                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
-                <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditTaskStatuses ? 'bg-indigo-100' : 'bg-slate-100'}`}>{canEditTaskStatuses ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
+                {canEditTaskStatuses && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
+                <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{canEditTaskStatuses && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
             </div>
         </div>
     );
