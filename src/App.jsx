@@ -1447,6 +1447,9 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
     const teamMemberEmails = useMemo(() => getLeaderTeamMembers(user, teams), [user, teams]);
 
+    // 判斷是否為普通成員（非 Admin/Editor/Leader）
+    const isRegularMember = !canAccessAll && !isLeader;
+
     // 計算用戶可選擇的團隊（Admin/Editor 可看全部，其他人只能選自己所屬的團隊）
     const userSelectableTeams = useMemo(() => {
         if (canAccessAll) return teams; // Admin/Editor 可選所有團隊
@@ -1458,6 +1461,29 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             return leaders.includes(userEmail) || members.includes(userEmail);
         });
     }, [canAccessAll, user, teams]);
+
+    // Leader 篩選用的團隊列表（只有自己所屬的團隊）
+    const filterableTeams = useMemo(() => {
+        if (canAccessAll) return teams; // Admin/Editor 可選所有團隊
+        // Leader 和普通成員只能篩選自己所屬的團隊
+        return userSelectableTeams;
+    }, [canAccessAll, teams, userSelectableTeams]);
+
+    // Leader 篩選用的負責人列表（只有自己所屬團隊的成員）
+    const filterableAssignees = useMemo(() => {
+        if (canAccessAll) return assigneeOptions; // Admin/Editor 可選所有負責人
+        if (!user?.email) return [];
+        // Leader 只能篩選自己所屬團隊的成員
+        const userEmail = user.email.toLowerCase();
+        const allowedEmails = new Set();
+        userSelectableTeams.forEach(team => {
+            const leaders = getTeamLeaders(team);
+            const members = team.members || [];
+            leaders.forEach(l => allowedEmails.add(formatEmailPrefix(l)));
+            members.forEach(m => allowedEmails.add(formatEmailPrefix(m)));
+        });
+        return assigneeOptions.filter(a => allowedEmails.has(a));
+    }, [canAccessAll, user, assigneeOptions, userSelectableTeams]);
 
     useEffect(() => {
         if (!db || !user) return;
@@ -1622,9 +1648,9 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-full sm:w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{assigneeOptions.map(a => <option key={a} value={a}>{a}</option>)}</select>
-                <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>}
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>}
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
                 {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                 <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm w-full sm:w-auto"><Download size={18} /> 匯出</button>
                 <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
@@ -1671,6 +1697,12 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
     const [searchQuery, setSearchQuery] = useState('');
     const [showAIModal, setShowAIModal] = useState(false);
 
+    // Leader 相關狀態
+    const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
+
+    // 判斷是否為普通成員（非 Admin/Editor/Leader）
+    const isRegularMember = !canAccessAll && !isLeader;
+
     // 計算用戶可選擇的團隊（Admin/Editor 可看全部，其他人只能選自己所屬的團隊）
     const userSelectableTeams = useMemo(() => {
         if (canAccessAll) return teams;
@@ -1682,6 +1714,13 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
             return leaders.includes(userEmail) || members.includes(userEmail);
         });
     }, [canAccessAll, user, teams]);
+
+    // Leader 篩選用的團隊列表（只有自己所屬的團隊）
+    const filterableTeams = useMemo(() => {
+        if (canAccessAll) return teams; // Admin/Editor 可選所有團隊
+        // Leader 和普通成員只能篩選自己所屬的團隊
+        return userSelectableTeams;
+    }, [canAccessAll, teams, userSelectableTeams]);
 
     useEffect(() => {
         if (!db || !user) return;
@@ -1752,8 +1791,8 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
             <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>}
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
                 {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
                 <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
             </div>
