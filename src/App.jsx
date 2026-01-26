@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.0"; // 重構版本 - 完整 Design System 支援
+const APP_VERSION = "v1.0.1"; // 修正團隊成員顯示問題
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -2770,27 +2770,54 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                             <div>
                                                 <label className="block text-xs text-slate-500 mb-1">選擇成員</label>
                                                 <div className="max-h-40 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
-                                                    {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !editTeamLeader.split(',').map(l => l.trim().toLowerCase()).includes(u.email.toLowerCase())).map(u => {
+                                                    {(() => {
+                                                        const leaderEmails = editTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
                                                         const memberList = editTeamMembers.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
-                                                        const isSelected = memberList.includes(u.email.toLowerCase());
+                                                        const allUserEmails = allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => u.email.toLowerCase());
+
+                                                        // 合併：allUsers + 現有成員（可能已不在 allUsers 中）
+                                                        const orphanedMembers = memberList.filter(m => !allUserEmails.includes(m) && !leaderEmails.includes(m));
+
                                                         return (
-                                                            <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={isSelected}
-                                                                    onChange={(e) => {
-                                                                        if (e.target.checked) {
-                                                                            setEditTeamMembers(prev => prev ? `${prev}, ${u.email}` : u.email);
-                                                                        } else {
-                                                                            setEditTeamMembers(prev => prev.split(',').map(m => m.trim()).filter(m => m.toLowerCase() !== u.email.toLowerCase()).join(', '));
-                                                                        }
-                                                                    }}
-                                                                    className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
-                                                                />
-                                                                <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
-                                                            </label>
+                                                            <>
+                                                                {/* 顯示已不存在的成員（可移除） */}
+                                                                {orphanedMembers.map(m => (
+                                                                    <label key={m} className="flex items-center gap-2 p-1.5 hover:bg-red-50 rounded cursor-pointer bg-red-50">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={true}
+                                                                            onChange={() => {
+                                                                                setEditTeamMembers(prev => prev.split(',').map(p => p.trim()).filter(p => p.toLowerCase() !== m).join(', '));
+                                                                            }}
+                                                                            className="rounded border-red-300 text-red-600 focus:ring-red-500"
+                                                                        />
+                                                                        <span className="text-sm text-red-700">{formatEmailPrefix(m)} <span className="text-xs text-red-500">(已刪除)</span></span>
+                                                                    </label>
+                                                                ))}
+                                                                {/* 顯示現有用戶 */}
+                                                                {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !leaderEmails.includes(u.email.toLowerCase())).map(u => {
+                                                                    const isSelected = memberList.includes(u.email.toLowerCase());
+                                                                    return (
+                                                                        <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isSelected}
+                                                                                onChange={(e) => {
+                                                                                    if (e.target.checked) {
+                                                                                        setEditTeamMembers(prev => prev ? `${prev}, ${u.email}` : u.email);
+                                                                                    } else {
+                                                                                        setEditTeamMembers(prev => prev.split(',').map(m => m.trim()).filter(m => m.toLowerCase() !== u.email.toLowerCase()).join(', '));
+                                                                                    }
+                                                                                }}
+                                                                                className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                                            />
+                                                                            <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
+                                                                        </label>
+                                                                    );
+                                                                })}
+                                                            </>
                                                         );
-                                                    })}
+                                                    })()}
                                                     {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !editTeamLeader.split(',').map(l => l.trim().toLowerCase()).includes(u.email.toLowerCase())).length === 0 && (
                                                         <p className="text-xs text-slate-400 p-2">沒有可選擇的成員</p>
                                                     )}
