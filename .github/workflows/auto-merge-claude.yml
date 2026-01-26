@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   pages: write
   id-token: write
 
@@ -29,14 +30,36 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
 
-      - name: Merge to main
+      - name: Create and Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔄 正在合併 ${{ github.ref_name }} 到 main..."
-          git checkout main
-          git pull origin main
-          git merge origin/${{ github.ref_name }} --no-edit -m "Auto merge: ${{ github.ref_name }} to main"
-          git push origin main
+          BRANCH_NAME="${{ github.ref_name }}"
+          echo "🔄 正在處理分支: $BRANCH_NAME"
+
+          # 檢查是否已有該分支的 PR
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number -q '.[0].number' || echo "")
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "📋 找到現有 PR #$EXISTING_PR，直接合併..."
+            gh pr merge "$EXISTING_PR" --merge --delete-branch
+          else
+            echo "📝 創建新的 PR..."
+            PR_URL=$(gh pr create --title "Auto merge: $BRANCH_NAME" --body "自動合併 Claude 分支到 main" --base main --head "$BRANCH_NAME")
+            echo "✅ PR 已創建: $PR_URL"
+
+            # 獲取 PR 編號並合併
+            PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --state open --json number -q '.[0].number')
+            echo "🔀 正在合併 PR #$PR_NUMBER..."
+            gh pr merge "$PR_NUMBER" --merge --delete-branch
+          fi
+
           echo "✅ 合併完成！"
+
+      - name: Checkout main for build
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

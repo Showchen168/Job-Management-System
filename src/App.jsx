@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.4"; // 限制篩選權限，Leader 看不到已註冊使用者列表
+const APP_VERSION = "v1.0.5"; // 修正自動合併腳本
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
