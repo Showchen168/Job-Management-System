@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.4"; // 限制篩選權限，Leader 看不到已註冊使用者列表
+const APP_VERSION = "v1.0.6"; // 更新聯繫人備注
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
@@ -3245,7 +3245,7 @@ const App = () => {
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                         <p className="text-amber-800 text-sm">
                             <strong>請聯繫系統管理員：</strong><br />
-                            <span className="text-amber-700">Doris Kuo</span>
+                            <span className="text-amber-700">Doris Kuo or Team Leader</span>
                         </p>
                     </div>
                     <p className="text-xs text-slate-400 mb-6">系統管理員會盡快為您配置團隊權限</p>
