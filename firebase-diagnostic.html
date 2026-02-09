@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase 連線診斷工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+        }
+        .status-card {
+            background: #f7fafc;
+            border-left: 4px solid #cbd5e0;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        .status-card.success {
+            background: #f0fdf4;
+            border-left-color: #10b981;
+        }
+        .status-card.error {
+            background: #fef2f2;
+            border-left-color: #ef4444;
+        }
+        .status-card.warning {
+            background: #fffbeb;
+            border-left-color: #f59e0b;
+        }
+        .status-card h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-card pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+        .icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            text-align: center;
+            line-height: 24px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 10px 5px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .progress {
+            margin: 20px 0;
+        }
+        .progress-bar {
+            background: #e5e7eb;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .log-output {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+        }
+        .log-entry.info { color: #60a5fa; }
+        .log-entry.success { color: #34d399; }
+        .log-entry.error { color: #f87171; }
+        .log-entry.warning { color: #fbbf24; }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .summary-item {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .summary-item .value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .summary-item.success .value { color: #10b981; }
+        .summary-item.error .value { color: #ef4444; }
+        .summary-item.warning .value { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔥 Firebase 連線診斷工具</h1>
+            <p>自動檢測 Firebase 配置和連線狀態</p>
+        </div>
+
+        <div class="content">
+            <div style="text-align: center;">
+                <button class="btn" id="startBtn" onclick="startDiagnosis()">🚀 開始診斷</button>
+                <button class="btn" id="clearBtn" onclick="clearLogs()">🗑️ 清除日誌</button>
+            </div>
+
+            <div class="progress" id="progress" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <p style="text-align: center; margin-top: 10px;" id="progressText">準備中...</p>
+            </div>
+
+            <div class="summary" id="summary" style="display: none;">
+                <div class="summary-item success">
+                    <div>✅ 成功</div>
+                    <div class="value" id="successCount">0</div>
+                </div>
+                <div class="summary-item error">
+                    <div>❌ 失敗</div>
+                    <div class="value" id="errorCount">0</div>
+                </div>
+                <div class="summary-item warning">
+                    <div>⚠️ 警告</div>
+                    <div class="value" id="warningCount">0</div>
+                </div>
+            </div>
+
+            <div class="log-output" id="logOutput"></div>
+
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getAuth } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+        import { getFirestore, doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        const DEFAULT_CONFIG = {
+            apiKey: "AIzaSyAGezrKXfKSwvh1Aauy-wrTr53e_WtuXVE",
+            authDomain: "job-management-system-16741.firebaseapp.com",
+            projectId: "job-management-system-16741",
+            storageBucket: "job-management-system-16741.firebasestorage.app",
+            messagingSenderId: "1042345096032",
+            appId: "1:1042345096032:web:853c2d9c35c06b7dd9a405",
+            measurementId: "G-FM8QW4LJ2T"
+        };
+
+        let successCount = 0;
+        let errorCount = 0;
+        let warningCount = 0;
+
+        function log(message, type = 'info') {
+            const logOutput = document.getElementById('logOutput');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString('zh-TW');
+            entry.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+
+            if (type === 'success') successCount++;
+            if (type === 'error') errorCount++;
+            if (type === 'warning') warningCount++;
+
+            updateSummary();
+        }
+
+        function updateSummary() {
+            document.getElementById('successCount').textContent = successCount;
+            document.getElementById('errorCount').textContent = errorCount;
+            document.getElementById('warningCount').textContent = warningCount;
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function addResult(title, status, details) {
+            const results = document.getElementById('results');
+            const card = document.createElement('div');
+            card.className = `status-card ${status}`;
+
+            const icon = status === 'success' ? '✅' : status === 'error' ? '❌' : '⚠️';
+            card.innerHTML = `
+                <h3><span class="icon">${icon}</span> ${title}</h3>
+                ${details}
+            `;
+            results.appendChild(card);
+        }
+
+        window.startDiagnosis = async function() {
+            const startBtn = document.getElementById('startBtn');
+            const progress = document.getElementById('progress');
+            const summary = document.getElementById('summary');
+            const results = document.getElementById('results');
+
+            startBtn.disabled = true;
+            progress.style.display = 'block';
+            summary.style.display = 'grid';
+            results.innerHTML = '';
+
+            successCount = 0;
+            errorCount = 0;
+            warningCount = 0;
+            updateSummary();
+
+            log('========================================', 'info');
+            log('開始 Firebase 連線診斷', 'info');
+            log('========================================', 'info');
+
+            // Step 1: 檢查配置
+            updateProgress(10, '步驟 1/6: 檢查配置...');
+            log('步驟 1: 檢查 Firebase 配置', 'info');
+
+            const missingFields = [];
+            ['apiKey', 'authDomain', 'projectId', 'appId'].forEach(field => {
+                if (!DEFAULT_CONFIG[field]) missingFields.push(field);
+            });
+
+            if (missingFields.length > 0) {
+                log(`❌ 缺少配置字段: ${missingFields.join(', ')}`, 'error');
+                addResult('配置檢查', 'error', `<p>缺少必要字段: ${missingFields.join(', ')}</p>`);
+                startBtn.disabled = false;
+                return;
+            }
+
+            log('✅ Firebase 配置完整', 'success');
+            log(`   項目 ID: ${DEFAULT_CONFIG.projectId}`, 'info');
+            log(`   認證域名: ${DEFAULT_CONFIG.authDomain}`, 'info');
+            addResult('配置檢查', 'success', `
+                <p>✅ 所有必要字段都已配置</p>
+                <pre>${JSON.stringify(DEFAULT_CONFIG, null, 2)}</pre>
+            `);
+
+            await sleep(500);
+
+            // Step 2: 初始化 Firebase App
+            updateProgress(25, '步驟 2/6: 初始化 Firebase App...');
+            log('步驟 2: 初始化 Firebase App', 'info');
+
+            let app, auth, db;
+            try {
+                const existingApp = getApps().find(a => a.name === 'diagnostic-app');
+                if (existingApp) {
+                    log('⚠️ 使用現有的 App 實例', 'warning');
+                    app = existingApp;
+                } else {
+                    app = initializeApp(DEFAULT_CONFIG, 'diagnostic-app');
+                }
+                log(`✅ Firebase App 初始化成功`, 'success');
+                log(`   App 名稱: ${app.name}`, 'info');
+                addResult('Firebase App', 'success', `<p>✅ App 初始化成功</p><p>名稱: ${app.name}</p>`);
+            } catch (err) {
+                log(`❌ Firebase App 初始化失敗: ${err.message}`, 'error');
+                addResult('Firebase App', 'error', `<p>錯誤: ${err.message}</p><pre>${err.stack}</pre>`);
+                startBtn.disabled = false;
+                return;
+            }
+
+            await sleep(500);
+
+            // Step 3: 初始化 Auth
+            updateProgress(40, '步驟 3/6: 初始化 Firebase Auth...');
+            log('步驟 3: 初始化 Firebase Auth', 'info');
+
+            try {
+                auth = getAuth(app);
+                log('✅ Firebase Auth 初始化成功', 'success');
+                log(`   當前用戶: ${auth.currentUser ? auth.currentUser.email : '未登入'}`, 'info');
+                addResult('Firebase Auth', 'success', `<p>✅ Auth 初始化成功</p><p>用戶狀態: ${auth.currentUser ? auth.currentUser.email : '未登入'}</p>`);
+            } catch (err) {
+                log(`❌ Firebase Auth 初始化失敗: ${err.message}`, 'error');
+                addResult('Firebase Auth', 'error', `<p>錯誤: ${err.message}</p>`);
+            }
+
+            await sleep(500);
+
+            // Step 4: 初始化 Firestore
+            updateProgress(55, '步驟 4/6: 初始化 Firestore...');
+            log('步驟 4: 初始化 Firestore', 'info');
+
+            try {
+                db = getFirestore(app);
+                log('✅ Firestore 初始化成功', 'success');
+                addResult('Firestore', 'success', `<p>✅ Firestore 初始化成功</p>`);
+            } catch (err) {
+                log(`❌ Firestore 初始化失敗: ${err.message}`, 'error');
+                addResult('Firestore', 'error', `<p>錯誤: ${err.message}</p>`);
+                startBtn.disabled = false;
+                return;
+            }
+
+            await sleep(500);
+
+            // Step 5: 測試 Firestore 連線
+            updateProgress(70, '步驟 5/6: 測試 Firestore 連線...');
+            log('步驟 5: 測試 Firestore 連線', 'info');
+
+            const testDocRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'connection');
+            log(`   嘗試讀取文檔: ${testDocRef.path}`, 'info');
+
+            try {
+                const docSnap = await getDoc(testDocRef);
+
+                if (docSnap.exists()) {
+                    log('✅ 成功連線到 Firestore', 'success');
+                    log(`   文檔存在: 是`, 'info');
+                    log(`   來自快取: ${docSnap.metadata.fromCache ? '是' : '否'}`, 'info');
+                    log(`   有待寫入: ${docSnap.metadata.hasPendingWrites ? '是' : '否'}`, 'info');
+                    addResult('Firestore 連線測試', 'success', `
+                        <p>✅ 成功讀取文檔</p>
+                        <p>文檔路徑: ${testDocRef.path}</p>
+                        <p>來自快取: ${docSnap.metadata.fromCache ? '是' : '否'}</p>
+                        <pre>${JSON.stringify(docSnap.data(), null, 2)}</pre>
+                    `);
+                } else {
+                    log('⚠️ 文檔不存在（連線成功但文檔缺失）', 'warning');
+                    log(`   來自快取: ${docSnap.metadata.fromCache ? '是' : '否'}`, 'info');
+
+                    // 嘗試創建文檔
+                    log('   嘗試創建文檔...', 'info');
+                    try {
+                        await setDoc(testDocRef, {
+                            status: 'online',
+                            lastUpdated: new Date().toISOString(),
+                            createdBy: 'diagnostic-tool'
+                        });
+                        log('✅ 文檔創建成功', 'success');
+                        addResult('Firestore 連線測試', 'success', `
+                            <p>✅ 連線成功</p>
+                            <p>⚠️ 原始文檔不存在，已自動創建</p>
+                            <p>文檔路徑: ${testDocRef.path}</p>
+                        `);
+                    } catch (createErr) {
+                        log(`❌ 無法創建文檔: ${createErr.message}`, 'error');
+                        log(`   錯誤代碼: ${createErr.code}`, 'error');
+
+                        let suggestion = '';
+                        if (createErr.code === 'permission-denied') {
+                            suggestion = '<p>💡 <strong>可能原因：</strong>Firestore 安全規則阻止寫入</p><p>請檢查 Firebase Console > Firestore > Rules</p>';
+                        }
+
+                        addResult('Firestore 連線測試', 'warning', `
+                            <p>⚠️ 可以連線但無法寫入</p>
+                            <p>錯誤: ${createErr.message}</p>
+                            ${suggestion}
+                        `);
+                    }
+                }
+            } catch (err) {
+                log(`❌ Firestore 連線失敗: ${err.message}`, 'error');
+                log(`   錯誤代碼: ${err.code}`, 'error');
+
+                let suggestion = '';
+                if (err.code === 'permission-denied') {
+                    suggestion = `
+                        <h4>💡 可能原因：</h4>
+                        <ul style="margin-left: 20px;">
+                            <li>Firestore 安全規則阻止訪問</li>
+                            <li>用戶未登入</li>
+                            <li>需要在 Firebase Console > Firestore > Rules 更新規則</li>
+                        </ul>
+                    `;
+                } else if (err.code === 'unavailable') {
+                    suggestion = `
+                        <h4>💡 可能原因：</h4>
+                        <ul style="margin-left: 20px;">
+                            <li>網路連線問題</li>
+                            <li>Firebase 服務暫時不可用</li>
+                            <li>防火牆阻擋 Firebase 域名</li>
+                        </ul>
+                    `;
+                } else if (err.code === 'not-found') {
+                    suggestion = `
+                        <h4>💡 可能原因：</h4>
+                        <ul style="margin-left: 20px;">
+                            <li>Firestore 數據庫未在 Firebase Console 中創建</li>
+                            <li>項目 ID 錯誤</li>
+                        </ul>
+                    `;
+                }
+
+                addResult('Firestore 連線測試', 'error', `
+                    <p>❌ 連線失敗</p>
+                    <p>錯誤: ${err.message}</p>
+                    <p>錯誤代碼: ${err.code}</p>
+                    ${suggestion}
+                `);
+            }
+
+            await sleep(500);
+
+            // Step 6: 檢查網路連線
+            updateProgress(85, '步驟 6/6: 檢查網路連線...');
+            log('步驟 6: 檢查網路連線', 'info');
+            log(`   瀏覽器線上狀態: ${navigator.onLine ? '線上' : '離線'}`, 'info');
+
+            const testDomains = [
+                { name: 'Auth Domain', url: `https://${DEFAULT_CONFIG.authDomain}` },
+                { name: 'Firestore API', url: 'https://firestore.googleapis.com' },
+                { name: 'Identity Toolkit', url: 'https://identitytoolkit.googleapis.com' }
+            ];
+
+            let networkResults = [];
+            for (const domain of testDomains) {
+                try {
+                    await fetch(domain.url, { method: 'HEAD', mode: 'no-cors' });
+                    log(`✅ 可以訪問: ${domain.name}`, 'success');
+                    networkResults.push(`✅ ${domain.name}: 可訪問`);
+                } catch (err) {
+                    log(`❌ 無法訪問: ${domain.name} - ${err.message}`, 'error');
+                    networkResults.push(`❌ ${domain.name}: ${err.message}`);
+                }
+            }
+
+            addResult('網路連線檢查', networkResults.filter(r => r.startsWith('❌')).length === 0 ? 'success' : 'warning', `
+                <p>瀏覽器狀態: ${navigator.onLine ? '🟢 線上' : '🔴 離線'}</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    ${networkResults.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+            `);
+
+            // 完成
+            updateProgress(100, '診斷完成！');
+            log('========================================', 'info');
+            log('診斷完成', 'info');
+            log(`總結: ✅ ${successCount} 成功 | ❌ ${errorCount} 失敗 | ⚠️ ${warningCount} 警告`, 'info');
+            log('========================================', 'info');
+
+            startBtn.disabled = false;
+        };
+
+        window.clearLogs = function() {
+            document.getElementById('logOutput').innerHTML = '';
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('progress').style.display = 'none';
+            document.getElementById('summary').style.display = 'none';
+            successCount = 0;
+            errorCount = 0;
+            warningCount = 0;
+            updateSummary();
+        };
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 初始化日誌
+        log('診斷工具已就緒，點擊 "開始診斷" 按鈕開始', 'info');
+    </script>
+</body>
+</html>
