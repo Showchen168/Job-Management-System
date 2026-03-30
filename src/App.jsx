@@ -1686,7 +1686,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 onCancel={() => setIsEditing(false)}
             />
         )}
-        <p className="text-sm text-slate-900">點擊列可展開詳情</p>
+        <p className="text-sm text-slate-900">點擊列表可展開詳情</p>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-600">
@@ -3301,7 +3301,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
             </div>
 
             {/* 問題列表 */}
-            <p className="text-sm text-slate-900">點擊列可展開詳情</p>
+            <p className="text-sm text-slate-900">點擊列表可展開詳情</p>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-slate-600">
