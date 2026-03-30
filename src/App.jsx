@@ -3762,6 +3762,16 @@ const App = () => {
                         <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
                         <span>Firebase 連線狀態：{connectionStatus}</span>
                     </div>
+                    <div className="flex items-center justify-between mt-2 text-[11px] text-slate-400" data-testid="locale-toggle">
+                        <span>語系</span>
+                        <button
+                            onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))}
+                            className="px-2 py-1 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
+                            data-testid="locale-toggle-button"
+                        >
+                            {locale === 'zh-Hant' ? '简体' : '繁體'}
+                        </button>
+                    </div>
                 </div>
                 <nav className="p-4 space-y-2 flex-1">
                     <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
@@ -3802,17 +3812,7 @@ const App = () => {
                         </button>
                     )}
 
-                    <div className="pt-3 border-t border-slate-700 text-[10px] text-slate-500 text-center">
-                        <div className="flex items-center justify-between mb-3 text-[11px] text-slate-400" data-testid="locale-toggle">
-                            <span>語系</span>
-                            <button
-                                onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))}
-                                className="px-2 py-1 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
-                                data-testid="locale-toggle-button"
-                            >
-                                {locale === 'zh-Hant' ? '简体' : '繁體'}
-                            </button>
-                        </div>
+                    <div className="pt-3 border-t border-slate-700">
                     </div>
                 </div>
             </aside>
