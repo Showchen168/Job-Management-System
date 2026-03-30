@@ -1868,14 +1868,16 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
             geminiModel={geminiModel}
             dataType="meetings"
         />
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-wrap">
-                <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm w-full sm:w-auto"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-full sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>}
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm w-full sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-                {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm w-full sm:w-auto">{aiLoading ? <Loader2 size={18} className="animate-spin"/> : <Sparkles size={18} />} AI 總結</button>}
-                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md w-full sm:w-auto"><Plus size={18} /> 新增</button>
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
+                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>}
+                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+                {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
             </div>
         </div>
         {isEditing && (
@@ -3318,16 +3320,21 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
             )}
 
             {/* 頁首 */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center gap-2">
-                    <h2 className="text-2xl font-bold text-slate-800">問題管理</h2>
-                    {canAccessAll && (
-                        <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
-                            {isAdmin ? 'Admin View' : 'Editor View'}
-                        </span>
-                    )}
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-2xl font-bold text-slate-800">問題管理</h2>
+                        {canAccessAll && (
+                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                                {isAdmin ? 'Admin View' : 'Editor View'}
+                            </span>
+                        )}
+                    </div>
+                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm">
+                        <Plus size={16} /> 新增問題
+                    </button>
                 </div>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap gap-2 items-center">
                     <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm">
                         <Search size={16} className="text-slate-400" />
                         <input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
@@ -3338,9 +3345,6 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
                     </select>
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm">
                         <Download size={16} /> 匯出
-                    </button>
-                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm">
-                        <Plus size={16} /> 新增問題
                     </button>
                 </div>
             </div>
