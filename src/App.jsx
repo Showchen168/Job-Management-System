@@ -1355,6 +1355,7 @@ const AuthPage = ({ auth, error, connectionStatus }) => {
 const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
     const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {}, byAssignee: {}, byAssigneeStatus: {}, statusOrder: [] });
     const [meetingStats, setMeetingStats] = useState({ total: 0, byCategory: {} });
+    const [issueStats, setIssueStats] = useState({ total: 0, open: 0, overdue: 0, resolved: 0, byStatus: {}, byClient: {} });
 
     useEffect(() => {
         if (!db || !user) return;
@@ -1385,7 +1386,31 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
             });
             setMeetingStats({ total: t, byCategory: cats });
         });
-        return () => { unsubTasks(); unsubMeetings(); };
+        const qIssues = query(collectionGroup(db, 'issues'));
+        const unsubIssues = onSnapshot(qIssues, (snapshot) => {
+            let total = 0; let byStatus = {}; let byClient = {};
+            const now = new Date();
+            let open = 0; let overdue = 0; let resolved = 0;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // 權限篩選
+                if (!canAccessAll && data.createdByEmail !== user.email) return;
+                total++;
+                const st = data.status || '未定義';
+                byStatus[st] = (byStatus[st] || 0) + 1;
+                const cl = data.client || '未分類';
+                byClient[cl] = (byClient[cl] || 0) + 1;
+                const isDone = ['已解決', '已關閉'].includes(st);
+                if (!isDone) {
+                    open++;
+                    if (data.dueDate && new Date(data.dueDate) < now) overdue++;
+                } else {
+                    resolved++;
+                }
+            });
+            setIssueStats({ total, open, overdue, resolved, byStatus, byClient });
+        });
+        return () => { unsubTasks(); unsubMeetings(); unsubIssues(); };
     }, [db, user, canAccessAll]);
 
     return (
@@ -1437,6 +1462,50 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={20}/> 會議類型統計</h3>
                     <div className="flex items-center justify-between mb-6"><div><div className="text-3xl font-bold text-slate-800">{meetingStats.total}</div><div className="text-xs text-slate-500">總會議場次</div></div><div className="p-3 bg-emerald-100 rounded-full text-emerald-600"><Users size={24}/></div></div>
                     <div className="space-y-2">{Object.keys(meetingStats.byCategory).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(meetingStats.byCategory).map(([cat, count]) => (<div key={cat} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100"><span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>{cat}</span><span className="font-mono font-bold text-slate-700">{count}</span></div>))}</div>
+                </div>
+            </div>
+
+            {/* 問題管理統計 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle size={20} className="text-red-500"/> 問題管理概覽</h3>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                        {[
+                            { label: '全部問題', value: issueStats.total, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+                            { label: '未解決', value: issueStats.open, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
+                            { label: '已逾期', value: issueStats.overdue, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
+                            { label: '已解決/關閉', value: issueStats.resolved, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
+                        ].map(card => (
+                            <div key={card.label} className={`${card.bg} border ${card.border} rounded-xl p-4`}>
+                                <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+                                <div className="text-xs text-slate-500 mt-1">{card.label}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="space-y-2">
+                        {Object.keys(issueStats.byStatus).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(issueStats.byStatus).map(([st, count]) => (
+                            <div key={st} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100">
+                                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-400"></div>{st}</span>
+                                <span className="font-mono font-bold text-slate-700">{count}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Briefcase size={20} className="text-orange-500"/> 客戶/產線問題分佈</h3>
+                    <div className="space-y-3">
+                        {Object.keys(issueStats.byClient).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(issueStats.byClient).sort((a, b) => b[1] - a[1]).map(([client, count]) => (
+                            <div key={client}>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-slate-600">{client}</span>
+                                    <span className="font-bold text-slate-800">{count}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-2">
+                                    <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${(count / issueStats.total) * 100}%` }}></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>
