@@ -3778,20 +3778,14 @@ const App = () => {
                     <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
                     <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                     <NavButton active={activeTab === 'issues'} onClick={() => setActiveTab('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
-                    
-                    {canAccessSettings && (
-                        <div className="pt-4 border-t border-slate-700 mt-4">
-                            <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={20} />} label="系統設定" />
-                        </div>
-                    )}
                 </nav>
                 <div className="p-4 bg-slate-800 border-t border-slate-700">
                     <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
                         </div>
-                        <div className="overflow-hidden">
-                            <div className="text-sm font-bold truncate w-32" data-testid="user-display-name">{userDisplayName}</div>
+                        <div className="overflow-hidden flex-1">
+                            <div className="text-sm font-bold truncate" data-testid="user-display-name">{userDisplayName}</div>
                             <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                 {isUserAdmin ? (
                                     <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
@@ -3804,6 +3798,15 @@ const App = () => {
                                 )}
                             </div>
                         </div>
+                        {canAccessSettings && (
+                            <button
+                                onClick={() => setActiveTab('settings')}
+                                className={`p-1.5 rounded-lg transition flex-shrink-0 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                                title="系統設定"
+                            >
+                                <Settings size={16} />
+                            </button>
+                        )}
                     </div>
                     
                     {!testConfig.enabled && auth && (
