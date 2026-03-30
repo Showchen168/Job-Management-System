@@ -3810,13 +3810,10 @@ const App = () => {
                     </div>
                     
                     {!testConfig.enabled && auth && (
-                        <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition mb-3">
+                        <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition">
                             <LogOut size={14} /> 登出
                         </button>
                     )}
-
-                    <div className="pt-3 border-t border-slate-700">
-                    </div>
                 </div>
             </aside>
             
