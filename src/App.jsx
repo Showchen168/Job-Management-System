@@ -3776,8 +3776,8 @@ const App = () => {
                 <nav className="p-4 space-y-2 flex-1">
                     <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
                     <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
-                    <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                     <NavButton active={activeTab === 'issues'} onClick={() => setActiveTab('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
+                    <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                 </nav>
                 <div className="p-4 bg-slate-800 border-t border-slate-700">
                     <div className="flex items-center gap-2 mb-4">
