@@ -3189,12 +3189,13 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
     );
 };
 
-const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
+const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKey, geminiModel, canUseAI }) => {
     const [issues, setIssues] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [currentIssue, setCurrentIssue] = useState(null);
     const [filterStatus, setFilterStatus] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
+    const [showAIModal, setShowAIModal] = useState(false);
     const { modalConfig, showError, showConfirm } = useModal();
 
     // 權限相關
@@ -3290,6 +3291,14 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
         });
     };
 
+    const handleGenerateReport = () => {
+        if (!filteredIssues.length) {
+            showError('無資料', '目前列表為空。');
+            return;
+        }
+        setShowAIModal(true);
+    };
+
     const handleExport = () => {
         const headers = [
             { key: 'client', label: '客戶/產線' },
@@ -3307,6 +3316,14 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
     return (
         <div className="space-y-6 animate-in fade-in">
             <Modal {...modalConfig} />
+            <AIConversationModal
+                isOpen={showAIModal}
+                onClose={() => setShowAIModal(false)}
+                rawData={filteredIssues}
+                geminiApiKey={geminiApiKey}
+                geminiModel={geminiModel}
+                dataType="tasks"
+            />
 
             {/* 新增/編輯 Modal */}
             {isEditing && (
@@ -3343,6 +3360,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
                         <option value="All">全部狀態</option>
                         {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm"><Sparkles size={16} /> AI 總結</button>}
                     <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm">
                         <Download size={16} /> 匯出
                     </button>
@@ -3817,7 +3835,7 @@ const App = () => {
                     />
                 )}
                 {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} teams={teams} />}
-                {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} />}
+                {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} />}
                 {activeTab === 'settings' && (
                     canAccessSettings ? (
                         <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} />
