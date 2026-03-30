@@ -3756,8 +3756,8 @@ const App = () => {
                     <h1 className="text-xl font-bold flex items-center gap-2">
                         <Database className="text-blue-400" />
                         工作紀錄中心
+                        <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
                     </h1>
-                    <p className="text-xs text-slate-400 mt-2">Firebase 雲端同步版</p>
                     <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-2" data-testid="firebase-status">
                         <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
                         <span>Firebase 連線狀態：{connectionStatus}</span>
@@ -3813,8 +3813,6 @@ const App = () => {
                                 {locale === 'zh-Hant' ? '简体' : '繁體'}
                             </button>
                         </div>
-                        <p>System Creator: {SYSTEM_CREATOR}</p>
-                        <p>Version: {APP_VERSION}</p>
                     </div>
                 </div>
             </aside>
