@@ -25,7 +25,7 @@ import { marked } from 'marked';
 
 // --- 0. System Constants ---
 const SYSTEM_CREATOR = "Show";
-const APP_VERSION = "v1.0.8"; // 修正自動部署問題
+const APP_VERSION = "v1.1.0"; // 新增問題管理頁面
 const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
