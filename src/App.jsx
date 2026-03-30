@@ -1056,6 +1056,7 @@ const TaskForm = ({ initialData, onSave, onCancel, taskSources, taskStatuses, as
 };
 
 const TaskRow = ({ task, onEdit, onDelete }) => {
+    const [expanded, setExpanded] = useState(false);
     const getStatusColor = (status) => {
         const s = status.toLowerCase();
         if (s.includes('done') || s.includes('complete') || s.includes('完成')) return 'bg-green-100 text-green-700 border-green-200';
@@ -1063,20 +1064,30 @@ const TaskRow = ({ task, onEdit, onDelete }) => {
         if (s.includes('pending') || s.includes('wait') || s.includes('待')) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
         return 'bg-gray-100 text-gray-700 border-gray-200';
     };
+    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !task.status.toLowerCase().includes('done');
     return (
-        <tr className="hover:bg-slate-50 transition-colors">
-        <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(task.status)}`}>{task.status}</span></td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.source || '-'}</td>
-        <td className="px-6 py-4">
-            <div className="font-medium text-slate-800 max-w-xs truncate" title={task.title}>{task.title}</div>
-            {task.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {formatEmailPrefix(task.createdByEmail)}</div>}
-        </td>
-        <td className="px-6 py-4 whitespace-nowrap">{task.assignee || '-'}</td>
-        <td className="px-6 py-4 whitespace-nowrap">{task.assignedDate}</td>
-        <td className="px-6 py-4 whitespace-nowrap"><span className={task.dueDate && new Date(task.dueDate) < new Date() && !task.status.toLowerCase().includes('done') ? 'text-red-600 font-bold' : ''}>{task.dueDate || '-'}</span></td>
-        <td className="px-6 py-4 max-w-xs"><div className="flex flex-col gap-1">{task.progress && <div className="text-xs text-slate-600 truncate" title={task.progress}>{task.progress}</div>}{task.delayReason && (<div className="flex items-center gap-1 text-xs text-red-500 truncate" title={task.delayReason}><AlertCircle size={12} /> {task.delayReason}</div>)}</div></td>
-        <td className="px-6 py-4 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"><Edit2 size={16} /></button><button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"><Trash2 size={16} /></button></div></td>
+        <>
+        <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpanded(e => !e)}>
+            <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(task.status)}`}>{task.status}</span></td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.source || '-'}</td>
+            <td className="px-6 py-4">
+                <div className="font-medium text-slate-800 max-w-xs truncate" title={task.title}>{task.title}</div>
+                {task.createdByEmail && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><User size={10} /> {formatEmailPrefix(task.createdByEmail)}</div>}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">{task.assignee || '-'}</td>
+            <td className="px-6 py-4 whitespace-nowrap">{task.assignedDate}</td>
+            <td className="px-6 py-4 whitespace-nowrap"><span className={isOverdue ? 'text-red-600 font-bold' : ''}>{task.dueDate || '-'}</span></td>
+            <td className="px-6 py-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}><div className="flex justify-end gap-2"><button onClick={onEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"><Edit2 size={16} /></button><button onClick={onDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"><Trash2 size={16} /></button></div></td>
         </tr>
+        {expanded && (task.progress || task.delayReason) && (
+            <tr className="bg-slate-50">
+                <td colSpan={7} className="px-6 py-4 text-sm text-slate-600 border-t border-slate-100 space-y-2">
+                    {task.progress && <div><span className="font-semibold text-slate-500 mr-2">進度：</span><span className="whitespace-pre-wrap">{task.progress}</span></div>}
+                    {task.delayReason && <div className="flex items-start gap-1 text-red-600"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /><span><span className="font-semibold mr-1">延遲原因：</span>{task.delayReason}</span></div>}
+                </td>
+            </tr>
+        )}
+        </>
     );
 };
 
@@ -1085,9 +1096,13 @@ const MeetingForm = ({ initialData, onSave, onCancel, categories, teams = [] }) 
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     const handleContentChange = (newContent) => setFormData(prev => ({ ...prev, content: newContent }));
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mb-6">
-        <h3 className="font-bold text-lg mb-4 text-slate-700">{initialData ? '編輯會議記錄' : '新增會議記錄'}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl my-8 animate-in fade-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <h3 className="font-bold text-lg text-slate-800">{initialData ? '編輯會議記錄' : '新增會議記錄'}</h3>
+            <button onClick={onCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"><X size={18} /></button>
+        </div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">主題 <span className="text-red-500">*</span></label><input name="topic" value={formData.topic} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
             <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">分類 <span className="text-red-500">*</span></label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded" required><option value="" disabled>請選擇分類</option>{categories.map((cat, i) => <option key={i} value={cat}>{cat}</option>)}</select></div>
             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">日期 <span className="text-red-500">*</span></label><input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
@@ -1096,7 +1111,11 @@ const MeetingForm = ({ initialData, onSave, onCancel, categories, teams = [] }) 
             <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">參會人員 <span className="text-red-500">*</span></label><input name="attendees" value={formData.attendees} onChange={handleChange} className="w-full p-2 border rounded" required /></div>
             <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center justify-between"><span>內容 (支援圖片貼上) <span className="text-red-500">*</span></span><span className="text-[10px] font-normal text-slate-400 flex items-center gap-1"><ImageIcon size={10}/> 貼上截圖會自動壓縮</span></label><ContentEditor value={formData.content} onChange={handleContentChange} /></div>
         </div>
-        <div className="flex justify-end gap-3 mt-6"><button onClick={onCancel} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">取消</button><button onClick={() => onSave(formData)} className="px-6 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-2"><Save size={18} /> 儲存</button></div>
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+            <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition">取消</button>
+            <button onClick={() => onSave(formData)} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2 text-sm"><Save size={16} /> 儲存</button>
+        </div>
+        </div>
         </div>
     );
 };
@@ -1667,15 +1686,16 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 onCancel={() => setIsEditing(false)}
             />
         )}
+        <p className="text-sm text-slate-900">點擊列可展開詳情</p>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-600">
                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
-                <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 min-w-[150px]">進度</th><th className="px-6 py-3 text-right">操作</th></tr>
+                <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                 {filteredTasks.map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
-                {filteredTasks.length === 0 && <tr><td colSpan="8" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
+                {filteredTasks.length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
                 </tbody>
             </table>
             </div>
@@ -1838,6 +1858,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const [allUsers, setAllUsers] = useState([]);
     const [isUserListLoading, setIsUserListLoading] = useState(false);
     const [userListError, setUserListError] = useState('');
+    const [isUserListExpanded, setIsUserListExpanded] = useState(false);
     const [emailServiceConfig, setEmailServiceConfig] = useState({
         provider: 'emailjs',
         serviceId: '',
@@ -2459,9 +2480,23 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
             
             {/* User Registry List - Admin/Editor Only */}
             {(isAdmin || isEditor) && (
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="registered-users">
-                <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2><p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p></div></div>
-                <div className="overflow-x-auto">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200" data-testid="registered-users">
+                <button
+                    onClick={() => setIsUserListExpanded(e => !e)}
+                    className="w-full flex items-center justify-between p-8 text-left hover:bg-slate-50 transition-colors rounded-xl"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div>
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2>
+                            <p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p>
+                        </div>
+                    </div>
+                    <ChevronRight size={20} className={`text-slate-400 transition-transform flex-shrink-0 ${isUserListExpanded ? 'rotate-90' : ''}`} />
+                </button>
+                {isUserListExpanded && (
+                <div className="px-8 pb-8 border-t border-slate-100">
+                <div className="overflow-x-auto mt-6">
                     <table className="w-full text-sm text-left text-slate-600">
                         <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                             <tr>
@@ -2510,6 +2545,8 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                         </tbody>
                     </table>
                 </div>
+                </div>
+                )}
             </div>
             )}
 
@@ -2956,6 +2993,355 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     );
 };
 
+// --- 3.5 Issue Manager Component ---
+
+const ISSUE_STATUSES = ['待處理', '處理中', '待驗證', '已解決', '已關閉'];
+
+const priorityConfig = {
+    '緊急': { color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' },
+    '高':   { color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+    '中':   { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', dot: 'bg-yellow-500' },
+    '低':   { color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+};
+
+const issueStatusConfig = {
+    '待處理': { color: 'bg-slate-100 text-slate-600', icon: <Clock size={12} /> },
+    '處理中': { color: 'bg-blue-100 text-blue-700', icon: <RefreshCw size={12} /> },
+    '待驗證': { color: 'bg-purple-100 text-purple-700', icon: <AlertCircle size={12} /> },
+    '已解決': { color: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
+    '已關閉': { color: 'bg-slate-100 text-slate-400', icon: <X size={12} /> },
+};
+
+const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) => {
+    const [form, setForm] = useState({
+        title: '',
+        description: '',
+        client: '',
+        status: '待處理',
+        dueDate: '',
+        progress: '',
+        ...initialData,
+    });
+
+    const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-8 animate-in fade-in">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800">{initialData?.id ? '編輯問題' : '新增問題'}</h3>
+                    <button onClick={onCancel} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"><X size={18} /></button>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">標題 <span className="text-red-500">*</span></label>
+                        <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="問題標題" className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">描述 <span className="text-red-500">*</span></label>
+                        <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="詳細描述問題..." rows={3} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">客戶 / 產線 <span className="text-red-500">*</span></label>
+                        <input value={form.client} onChange={e => set('client', e.target.value)} placeholder="例：客戶A、產線B..." className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">狀態 <span className="text-red-500">*</span></label>
+                        <select value={form.status} onChange={e => set('status', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">負責人</label>
+                        <div className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-600">{formatEmailPrefix(userEmail)}</div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">所屬團隊</label>
+                        <div className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-600">{userTeamName || '未分配'}</div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">截止日期 <span className="text-red-500">*</span></label>
+                        <input type="date" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">進度更新 <span className="text-red-500">*</span></label>
+                        <textarea value={form.progress} onChange={e => set('progress', e.target.value)} placeholder="記錄最新處理進度，例：5/20 已聯繫客戶確認需求..." rows={4} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+                    <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition">取消</button>
+                    <button onClick={() => onSave(form)} className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm flex items-center gap-2"><Save size={15} /> 儲存</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
+    const [expanded, setExpanded] = useState(false);
+    const sta = issueStatusConfig[issue.status] || issueStatusConfig['待處理'];
+    const isOverdue = issue.dueDate && issue.status !== '已解決' && issue.status !== '已關閉' && new Date(issue.dueDate) < new Date();
+    const createdDate = issue.createdAt?.seconds
+        ? new Date(issue.createdAt.seconds * 1000).toLocaleDateString('zh-TW')
+        : issue.createdDateStr || '—';
+
+    return (
+        <>
+            <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpanded(e => !e)}>
+                <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sta.color}`}>
+                        {sta.icon}{issue.status}
+                    </span>
+                </td>
+                <td className="px-4 py-3">
+                    <div className="font-medium text-slate-800 text-sm">{issue.title}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{issue.description?.substring(0, 60)}{issue.description?.length > 60 ? '...' : ''}</div>
+                </td>
+                <td className="px-4 py-3">
+                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">{issue.client || '—'}</span>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{issue.assignee || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm text-slate-500">{createdDate}</td>
+                <td className={`px-4 py-3 text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
+                    {issue.dueDate || <span className="text-slate-300">—</span>}
+                    {isOverdue && <span className="ml-1 text-[10px] bg-red-100 text-red-600 px-1 rounded">逾期</span>}
+                </td>
+                <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    {canEdit && (
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => onEdit(issue)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"><Edit2 size={14} /></button>
+                            <button onClick={() => onDelete(issue)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"><Trash2 size={14} /></button>
+                        </div>
+                    )}
+                </td>
+            </tr>
+            {expanded && (issue.description || issue.progress) && (
+                <tr className="bg-slate-50">
+                    <td colSpan={8} className="px-6 py-4 text-sm text-slate-600 border-t border-slate-100 space-y-2">
+                        {issue.description && <div><span className="font-semibold text-slate-500 mr-2">描述：</span>{issue.description}</div>}
+                        {issue.progress && <div><span className="font-semibold text-slate-500 mr-2">進度更新：</span><span className="whitespace-pre-wrap">{issue.progress}</span></div>}
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+};
+
+const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
+    const [issues, setIssues] = useState([]);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentIssue, setCurrentIssue] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
+    const { modalConfig, showError, showConfirm } = useModal();
+
+    // 權限相關
+    const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
+    const teamMemberEmails = useMemo(() => getLeaderTeamMembers(user, teams), [user, teams]);
+
+    // 取得當前用戶所屬團隊名稱
+    const userTeamName = useMemo(() => {
+        if (!user?.email) return '';
+        const team = teams.find(t => {
+            const leaders = getTeamLeaders(t).map(l => l.toLowerCase());
+            const members = (t.members || []).map(m => m.toLowerCase());
+            return leaders.includes(user.email.toLowerCase()) || members.includes(user.email.toLowerCase());
+        });
+        return team?.name || '';
+    }, [user, teams]);
+
+    // 讀取問題列表
+    useEffect(() => {
+        if (!db || !user) return;
+        const q = query(collectionGroup(db, 'issues'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            let data = snapshot.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() }));
+            if (!canAccessAll) {
+                if (isLeader && teamMemberEmails.length > 0) {
+                    // Leader：自己建立的 + 團隊成員建立的
+                    data = data.filter(issue =>
+                        issue.createdByEmail === user.email ||
+                        teamMemberEmails.includes(issue.createdByEmail)
+                    );
+                } else {
+                    // 一般成員：只看自己建立的
+                    data = data.filter(issue => issue.createdByEmail === user.email);
+                }
+            }
+            data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            setIssues(data);
+        }, err => console.error('Issues error:', err));
+        return () => unsubscribe();
+    }, [db, user, canAccessAll, isLeader, teamMemberEmails]);
+
+    const filteredIssues = useMemo(() => {
+        let res = issues;
+        if (filterStatus !== 'All') res = res.filter(i => i.status === filterStatus);
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            res = res.filter(i =>
+                i.title?.toLowerCase().includes(q) ||
+                i.description?.toLowerCase().includes(q) ||
+                i.client?.toLowerCase().includes(q) ||
+                i.assignee?.toLowerCase().includes(q)
+            );
+        }
+        return res;
+    }, [issues, filterStatus, searchQuery]);
+
+    // 統計數字
+    const stats = useMemo(() => ({
+        total: issues.length,
+        open: issues.filter(i => !['已解決', '已關閉'].includes(i.status)).length,
+        overdue: issues.filter(i => i.dueDate && !['已解決', '已關閉'].includes(i.status) && new Date(i.dueDate) < new Date()).length,
+        resolved: issues.filter(i => ['已解決', '已關閉'].includes(i.status)).length,
+    }), [issues]);
+
+    const handleSave = async (formData) => {
+        if (!formData.title?.trim() || !formData.description?.trim() || !formData.client?.trim() || !formData.status || !formData.dueDate || !formData.progress?.trim()) {
+            showError('驗證錯誤', '請填寫所有必填欄位（標題、描述、客戶/產線、狀態、截止日期、進度更新）');
+            return;
+        }
+        try {
+            const assignee = formatEmailPrefix(user.email);
+            const teamName = userTeamName;
+            if (formData.id && formData.path) {
+                await updateDoc(doc(db, formData.path), { ...formData, assignee, teamName, updatedAt: serverTimestamp() });
+            } else {
+                const colRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'issues');
+                await addDoc(colRef, { ...formData, assignee, teamName, createdByEmail: user.email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+            }
+            setIsEditing(false);
+            setCurrentIssue(null);
+        } catch (e) {
+            showError('儲存失敗', e.message);
+        }
+    };
+
+    const handleDelete = (issue) => {
+        showConfirm('確認刪除', `確定要刪除「${issue.title}」？`, async () => {
+            try {
+                await deleteDoc(doc(db, issue.path));
+            } catch (e) {
+                showError('刪除失敗', e.message);
+            }
+        });
+    };
+
+    const handleExport = () => {
+        const headers = [
+            { key: 'client', label: '客戶/產線' },
+            { key: 'title', label: '標題' },
+            { key: 'status', label: '狀態' },
+            { key: 'assignee', label: '負責人' },
+            { key: 'teamName', label: '所屬團隊' },
+            { key: 'dueDate', label: '截止日期' },
+            { key: 'description', label: '描述' },
+            { key: 'progress', label: '進度更新' },
+        ];
+        exportToCSV(filteredIssues, 'Issues', headers);
+    };
+
+    return (
+        <div className="space-y-6 animate-in fade-in">
+            <Modal {...modalConfig} />
+
+            {/* 新增/編輯 Modal */}
+            {isEditing && (
+                <IssueForm
+                    initialData={currentIssue}
+                    onSave={handleSave}
+                    onCancel={() => { setIsEditing(false); setCurrentIssue(null); }}
+                    userEmail={user?.email}
+                    userTeamName={userTeamName}
+                />
+            )}
+
+            {/* 頁首 */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-slate-800">問題管理</h2>
+                    {canAccessAll && (
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {isAdmin ? 'Admin View' : 'Editor View'}
+                        </span>
+                    )}
+                </div>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm">
+                        <Search size={16} className="text-slate-400" />
+                        <input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                    </div>
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm">
+                        <option value="All">全部狀態</option>
+                        {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm">
+                        <Download size={16} /> 匯出
+                    </button>
+                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm">
+                        <Plus size={16} /> 新增問題
+                    </button>
+                </div>
+            </div>
+
+            {/* 統計卡片 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: '全部問題', value: stats.total, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
+                    { label: '未解決', value: stats.open, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
+                    { label: '已逾期', value: stats.overdue, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
+                    { label: '已解決/關閉', value: stats.resolved, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
+                ].map(card => (
+                    <div key={card.label} className={`${card.bg} border ${card.border} rounded-xl p-4`}>
+                        <div className={`text-3xl font-bold ${card.color}`}>{card.value}</div>
+                        <div className="text-sm text-slate-500 mt-1">{card.label}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* 問題列表 */}
+            <p className="text-sm text-slate-900">點擊列可展開詳情</p>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-600">
+                        <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                            <tr>
+                                <th className="px-4 py-3">狀態</th>
+                                <th className="px-4 py-3 min-w-[200px]">標題</th>
+                                <th className="px-4 py-3">客戶/產線</th>
+                                <th className="px-4 py-3">負責人</th>
+                                <th className="px-4 py-3">建立日期</th>
+                                <th className="px-4 py-3">截止日期</th>
+                                <th className="px-4 py-3 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredIssues.map(issue => (
+                                <IssueRow
+                                    key={issue.id}
+                                    issue={issue}
+                                    onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
+                                    onDelete={handleDelete}
+                                    canEdit={canAccessAll || issue.createdByEmail === user?.email}
+                                />
+                            ))}
+                            {filteredIssues.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                        <AlertCircle size={32} className="mx-auto mb-2 opacity-30" />
+                                        沒有符合條件的問題
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- 4. Main App Component (Must be last) ---
 
 const App = () => {
@@ -3283,6 +3669,7 @@ const App = () => {
                     <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
                     <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
                     <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
+                    <NavButton active={activeTab === 'issues'} onClick={() => setActiveTab('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
                     
                     {canAccessSettings && (
                         <div className="pt-4 border-t border-slate-700 mt-4">
@@ -3350,6 +3737,7 @@ const App = () => {
                     />
                 )}
                 {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} teams={teams} />}
+                {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} />}
                 {activeTab === 'settings' && (
                     canAccessSettings ? (
                         <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} />
