@@ -1423,40 +1423,10 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
                     return (<div key={status} className={`p-6 rounded-xl shadow-sm border ${colors[i % colors.length]}`}><div className="text-sm font-bold uppercase mb-2 opacity-80">{status}</div><div className="text-4xl font-bold">{count}</div></div>);
                 })}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart3 size={20}/> 待辦事項來源分析</h3>
                     <div className="space-y-3">{Object.keys(taskStats.bySource).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(taskStats.bySource).map(([src, count]) => (<div key={src}><div className="flex justify-between text-sm mb-1"><span className="text-slate-600">{src}</span><span className="font-bold text-slate-800">{count}</span></div><div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(count / taskStats.total) * 100}%` }}></div></div></div>))}</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><User size={20}/> 負責人待辦統計</h3>
-                    <div className="space-y-3">
-                        {Object.keys(taskStats.byAssignee).length === 0 ? (
-                            <p className="text-slate-400 text-sm">暫無資料</p>
-                        ) : (
-                            Object.entries(taskStats.byAssignee)
-                                .sort((a, b) => b[1] - a[1])
-                                .map(([name, count]) => {
-                                    const assigneeStatuses = taskStats.byAssigneeStatus[name] || {};
-                                    const statusList = taskStats.statusOrder.length ? taskStats.statusOrder : Object.keys(assigneeStatuses);
-                                    return (
-                                        <div key={name} className="text-sm p-3 rounded-lg border border-slate-100 hover:bg-slate-50">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-slate-700 font-medium truncate">{name}</span>
-                                                <span className="font-mono font-bold text-slate-700">{count}</span>
-                                            </div>
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                {statusList.filter((status) => assigneeStatuses[status]).map((status) => (
-                                                    <span key={status} className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                                                        {status} {assigneeStatuses[status]}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                        )}
-                    </div>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={20}/> 會議類型統計</h3>
@@ -1763,12 +1733,29 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                {filteredTasks.map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
-                {filteredTasks.length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
+                {filteredTasks.filter(t => !t.status?.toLowerCase().includes('done') && !t.status?.toLowerCase().includes('完成')).map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
+                {filteredTasks.filter(t => !t.status?.toLowerCase().includes('done') && !t.status?.toLowerCase().includes('完成')).length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
                 </tbody>
             </table>
             </div>
         </div>
+        {filteredTasks.some(t => t.status?.toLowerCase().includes('done') || t.status?.toLowerCase().includes('完成')) && (
+            <>
+                <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mt-2"><CheckCircle2 size={18} className="text-green-500"/> 已完成</h3>
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
+                    <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-600">
+                        <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                        <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                        {filteredTasks.filter(t => t.status?.toLowerCase().includes('done') || t.status?.toLowerCase().includes('完成')).map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+            </>
+        )}
         </div>
     );
 };
@@ -3064,7 +3051,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
 
 // --- 3.5 Issue Manager Component ---
 
-const ISSUE_STATUSES = ['待處理', '處理中', '待驗證', '已解決', '已關閉'];
+const ISSUE_STATUSES = ['處理中', '待驗證', '已解決'];
 
 const priorityConfig = {
     '緊急': { color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' },
@@ -3074,11 +3061,9 @@ const priorityConfig = {
 };
 
 const issueStatusConfig = {
-    '待處理': { color: 'bg-slate-100 text-slate-600', icon: <Clock size={12} /> },
     '處理中': { color: 'bg-blue-100 text-blue-700', icon: <RefreshCw size={12} /> },
     '待驗證': { color: 'bg-purple-100 text-purple-700', icon: <AlertCircle size={12} /> },
     '已解決': { color: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
-    '已關閉': { color: 'bg-slate-100 text-slate-400', icon: <X size={12} /> },
 };
 
 const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) => {
@@ -3134,6 +3119,7 @@ const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) =
                     </div>
                     <div className="md:col-span-2">
                         <label className="block text-xs font-semibold text-slate-500 mb-1">進度更新 <span className="text-red-500">*</span></label>
+                        <p className="text-xs text-red-500 mb-1">務必按照日期+內容的格式填寫，如：1/1 完成OOXX</p>
                         <textarea value={form.progress} onChange={e => set('progress', e.target.value)} placeholder="記錄最新處理進度，例：5/20 已聯繫客戶確認需求..." rows={4} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                     </div>
                 </div>
@@ -3386,27 +3372,43 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [] }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredIssues.map(issue => (
-                                <IssueRow
-                                    key={issue.id}
-                                    issue={issue}
-                                    onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
-                                    onDelete={handleDelete}
-                                    canEdit={canAccessAll || issue.createdByEmail === user?.email}
-                                />
+                            {filteredIssues.filter(i => i.status !== '已解決').map(issue => (
+                                <IssueRow key={issue.id} issue={issue} onEdit={i => { setCurrentIssue(i); setIsEditing(true); }} onDelete={handleDelete} canEdit={canAccessAll || issue.createdByEmail === user?.email} />
                             ))}
-                            {filteredIssues.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                                        <AlertCircle size={32} className="mx-auto mb-2 opacity-30" />
-                                        沒有符合條件的問題
-                                    </td>
-                                </tr>
+                            {filteredIssues.filter(i => i.status !== '已解決').length === 0 && (
+                                <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><AlertCircle size={32} className="mx-auto mb-2 opacity-30" />沒有符合條件的問題</td></tr>
                             )}
                         </tbody>
                     </table>
                 </div>
             </div>
+            {filteredIssues.some(i => i.status === '已解決') && (
+                <>
+                    <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mt-2"><CheckCircle2 size={18} className="text-green-500"/> 已解決</h3>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left text-slate-600">
+                                <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th className="px-4 py-3">狀態</th>
+                                        <th className="px-4 py-3 min-w-[200px]">標題</th>
+                                        <th className="px-4 py-3">客戶/產線</th>
+                                        <th className="px-4 py-3">負責人</th>
+                                        <th className="px-4 py-3">建立日期</th>
+                                        <th className="px-4 py-3">截止日期</th>
+                                        <th className="px-4 py-3 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredIssues.filter(i => i.status === '已解決').map(issue => (
+                                        <IssueRow key={issue.id} issue={issue} onEdit={i => { setCurrentIssue(i); setIsEditing(true); }} onDelete={handleDelete} canEdit={canAccessAll || issue.createdByEmail === user?.email} />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
