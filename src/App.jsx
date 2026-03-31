@@ -3157,8 +3157,10 @@ const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) =
 
 const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
     const [expanded, setExpanded] = useState(false);
-    const sta = issueStatusConfig[issue.status] || issueStatusConfig['處理中'];
-    const isOverdue = issue.dueDate && issue.status !== '已解決' && new Date(issue.dueDate) < new Date();
+    // 舊資料可能有「待處理」/「已關閉」，統一對應到新狀態
+    const normalizedStatus = ISSUE_STATUSES.includes(issue.status) ? issue.status : '處理中';
+    const sta = issueStatusConfig[normalizedStatus];
+    const isOverdue = issue.dueDate && normalizedStatus !== '已解決' && new Date(issue.dueDate) < new Date();
     const createdDate = issue.createdAt?.seconds
         ? new Date(issue.createdAt.seconds * 1000).toLocaleDateString('zh-TW')
         : issue.createdDateStr || '—';
@@ -3168,7 +3170,7 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
             <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpanded(e => !e)}>
                 <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sta.color}`}>
-                        {sta.icon}{issue.status}
+                        {sta.icon}{normalizedStatus}
                     </span>
                 </td>
                 <td className="px-4 py-3 min-w-[200px]">
