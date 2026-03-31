@@ -957,6 +957,23 @@ const NavButton = ({ active, onClick, icon, label }) => (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>{icon}<span className="font-medium">{label}</span></button>
 );
 
+const CollapsibleDoneSection = ({ title, children, defaultExpanded = false }) => {
+    const [expanded, setExpanded] = useState(defaultExpanded);
+    return (
+        <div>
+            <button
+                onClick={() => setExpanded(e => !e)}
+                className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition mb-2"
+            >
+                <CheckCircle2 size={18} className="text-green-500" />
+                <span className="text-lg font-bold">{title}</span>
+                <ChevronRight size={16} className={`transition-transform text-slate-400 ${expanded ? 'rotate-90' : ''}`} />
+            </button>
+            {expanded && children}
+        </div>
+    );
+};
+
 const ContentEditor = ({ value, onChange }) => {
     const editableRef = useRef(null);
     useEffect(() => {
@@ -1745,8 +1762,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             </div>
         </div>
         {filteredTasks.some(t => t.status?.toLowerCase().includes('done') || t.status?.toLowerCase().includes('完成')) && (
-            <>
-                <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mt-2"><CheckCircle2 size={18} className="text-green-500"/> 已完成</h3>
+            <CollapsibleDoneSection title="已完成" defaultExpanded={false}>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
                     <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-slate-600">
@@ -1759,7 +1775,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                     </table>
                     </div>
                 </div>
-            </>
+            </CollapsibleDoneSection>
         )}
         </div>
     );
@@ -3078,7 +3094,7 @@ const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) =
         title: '',
         description: '',
         client: '',
-        status: '待處理',
+        status: '處理中',
         dueDate: '',
         progress: '',
         ...initialData,
@@ -3409,8 +3425,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                 </div>
             </div>
             {filteredIssues.some(i => i.status === '已解決') && (
-                <>
-                    <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mt-2"><CheckCircle2 size={18} className="text-green-500"/> 已解決</h3>
+                <CollapsibleDoneSection title="已解決" defaultExpanded={false}>
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-slate-600">
@@ -3433,7 +3448,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                             </table>
                         </div>
                     </div>
-                </>
+                </CollapsibleDoneSection>
             )}
         </div>
     );
