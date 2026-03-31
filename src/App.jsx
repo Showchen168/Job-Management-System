@@ -3155,16 +3155,15 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
                         {sta.icon}{issue.status}
                     </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 min-w-[200px]">
                     <div className="font-medium text-slate-800 text-sm">{issue.title}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">{issue.description?.substring(0, 60)}{issue.description?.length > 60 ? '...' : ''}</div>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 whitespace-nowrap">
                     <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">{issue.client || '—'}</span>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{issue.assignee || <span className="text-slate-300">—</span>}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{createdDate}</td>
-                <td className={`px-4 py-3 text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
+                <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{issue.assignee || <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{createdDate}</td>
+                <td className={`px-4 py-3 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
                     {issue.dueDate || <span className="text-slate-300">—</span>}
                     {isOverdue && <span className="ml-1 text-[10px] bg-red-100 text-red-600 px-1 rounded">逾期</span>}
                 </td>
