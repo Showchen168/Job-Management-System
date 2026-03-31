@@ -1400,7 +1400,7 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
                 byStatus[st] = (byStatus[st] || 0) + 1;
                 const cl = data.client || '未分類';
                 byClient[cl] = (byClient[cl] || 0) + 1;
-                const isDone = ['已解決', '已關閉'].includes(st);
+                const isDone = st === '已解決';
                 if (!isDone) {
                     open++;
                     if (data.dueDate && new Date(data.dueDate) < now) overdue++;
@@ -3141,8 +3141,8 @@ const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) =
 
 const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
     const [expanded, setExpanded] = useState(false);
-    const sta = issueStatusConfig[issue.status] || issueStatusConfig['待處理'];
-    const isOverdue = issue.dueDate && issue.status !== '已解決' && issue.status !== '已關閉' && new Date(issue.dueDate) < new Date();
+    const sta = issueStatusConfig[issue.status] || issueStatusConfig['處理中'];
+    const isOverdue = issue.dueDate && issue.status !== '已解決' && new Date(issue.dueDate) < new Date();
     const createdDate = issue.createdAt?.seconds
         ? new Date(issue.createdAt.seconds * 1000).toLocaleDateString('zh-TW')
         : issue.createdDateStr || '—';
@@ -3255,9 +3255,9 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     // 統計數字
     const stats = useMemo(() => ({
         total: issues.length,
-        open: issues.filter(i => !['已解決', '已關閉'].includes(i.status)).length,
-        overdue: issues.filter(i => i.dueDate && !['已解決', '已關閉'].includes(i.status) && new Date(i.dueDate) < new Date()).length,
-        resolved: issues.filter(i => ['已解決', '已關閉'].includes(i.status)).length,
+        open: issues.filter(i => i.status !== '已解決').length,
+        overdue: issues.filter(i => i.dueDate && i.status !== '已解決' && new Date(i.dueDate) < new Date()).length,
+        resolved: issues.filter(i => i.status === '已解決').length,
     }), [issues]);
 
     const handleSave = async (formData) => {
