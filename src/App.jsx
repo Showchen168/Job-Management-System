@@ -3101,18 +3101,30 @@ const issueStatusConfig = {
     '已解決': { color: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
 };
 
-const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) => {
+const IssueForm = ({ initialData, onSave, onCancel, assigneeOptions, teams }) => {
     const [form, setForm] = useState({
         title: '',
         description: '',
         client: '',
         status: '處理中',
+        assignee: '',
+        teamId: '',
         dueDate: '',
         progress: '',
         ...initialData,
     });
 
     const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+    // 根據選擇的團隊過濾負責人（跟 TaskForm 一樣）
+    const filteredAssignees = useMemo(() => {
+        if (!form.teamId) return assigneeOptions || [];
+        const selectedTeam = teams.find(t => t.id === form.teamId);
+        if (!selectedTeam) return assigneeOptions || [];
+        const teamEmails = [...getTeamLeaders(selectedTeam), ...(selectedTeam.members || [])];
+        const teamPrefixes = teamEmails.map(e => formatEmailPrefix(e));
+        return (assigneeOptions || []).filter(a => teamPrefixes.includes(a));
+    }, [form.teamId, teams, assigneeOptions]);
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
@@ -3141,12 +3153,22 @@ const IssueForm = ({ initialData, onSave, onCancel, userEmail, userTeamName }) =
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">負責人</label>
-                        <div className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-600">{formatEmailPrefix(userEmail)}</div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">負責人 <span className="text-red-500">*</span></label>
+                        <select value={form.assignee} onChange={e => set('assignee', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">請選擇負責人</option>
+                            {filteredAssignees.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">所屬團隊</label>
-                        <div className="w-full p-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-600">{userTeamName || '未分配'}</div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">所屬團隊 <span className="text-red-500">*</span></label>
+                        {teams.length > 0 ? (
+                            <select value={form.teamId} onChange={e => set('teamId', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">請選擇團隊</option>
+                                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        ) : (
+                            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">尚未加入團隊，請聯繫 Team Leader</div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">截止日期 <span className="text-red-500">*</span></label>
@@ -3180,8 +3202,8 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
     return (
         <>
             <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpanded(e => !e)}>
-                <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sta.color}`}>
+                <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${sta.color}`}>
                         {sta.icon}{normalizedStatus}
                     </span>
                 </td>
@@ -3231,16 +3253,33 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
     const teamMemberEmails = useMemo(() => getLeaderTeamMembers(user, teams), [user, teams]);
 
-    // 取得當前用戶所屬團隊名稱
-    const userTeamName = useMemo(() => {
-        if (!user?.email) return '';
-        const team = teams.find(t => {
-            const leaders = getTeamLeaders(t).map(l => l.toLowerCase());
-            const members = (t.members || []).map(m => m.toLowerCase());
-            return leaders.includes(user.email.toLowerCase()) || members.includes(user.email.toLowerCase());
+    // 可選擇的團隊（Admin/Editor 全部，其他人只看自己所屬的）
+    const userSelectableTeams = useMemo(() => {
+        if (canAccessAll) return teams;
+        if (!user?.email) return [];
+        const userEmail = user.email.toLowerCase();
+        return teams.filter(team => {
+            const leaders = getTeamLeaders(team).map(l => l.toLowerCase());
+            const members = (team.members || []).map(m => m.toLowerCase());
+            return leaders.includes(userEmail) || members.includes(userEmail);
         });
-        return team?.name || '';
-    }, [user, teams]);
+    }, [canAccessAll, user, teams]);
+
+    const [assigneeOptions, setAssigneeOptions] = useState([]);
+
+    // 讀取負責人選項
+    useEffect(() => {
+        if (!db) return;
+        const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
+        const q = query(usersRef, orderBy('lastSeen', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const opts = Array.from(new Set(
+                snapshot.docs.map(d => d.data()?.email).filter(Boolean).map(e => formatEmailPrefix(e))
+            )).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+            setAssigneeOptions(opts);
+        });
+        return () => unsubscribe();
+    }, [db]);
 
     // 讀取問題列表
     useEffect(() => {
@@ -3290,18 +3329,17 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     }), [issues]);
 
     const handleSave = async (formData) => {
-        if (!formData.title?.trim() || !formData.description?.trim() || !formData.client?.trim() || !formData.status || !formData.dueDate || !formData.progress?.trim()) {
-            showError('驗證錯誤', '請填寫所有必填欄位（標題、描述、客戶/產線、狀態、截止日期、進度更新）');
+        if (!formData.title?.trim() || !formData.description?.trim() || !formData.client?.trim() || !formData.status || !formData.dueDate || !formData.progress?.trim() || !formData.assignee || !formData.teamId) {
+            showError('驗證錯誤', '請填寫所有必填欄位');
             return;
         }
         try {
-            const assignee = formatEmailPrefix(user.email);
-            const teamName = userTeamName;
+            const teamName = teams.find(t => t.id === formData.teamId)?.name || '';
             if (formData.id && formData.path) {
-                await updateDoc(doc(db, formData.path), { ...formData, assignee, teamName, updatedAt: serverTimestamp() });
+                await updateDoc(doc(db, formData.path), { ...formData, teamName, updatedAt: serverTimestamp() });
             } else {
                 const colRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'issues');
-                await addDoc(colRef, { ...formData, assignee, teamName, createdByEmail: user.email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                await addDoc(colRef, { ...formData, teamName, createdByEmail: user.email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
             }
             setIsEditing(false);
             setCurrentIssue(null);
@@ -3360,8 +3398,8 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                     initialData={currentIssue}
                     onSave={handleSave}
                     onCancel={() => { setIsEditing(false); setCurrentIssue(null); }}
-                    userEmail={user?.email}
-                    userTeamName={userTeamName}
+                    assigneeOptions={assigneeOptions}
+                    teams={userSelectableTeams}
                 />
             )}
 
