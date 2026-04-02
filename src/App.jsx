@@ -1517,6 +1517,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     const [filterTeam, setFilterTeam] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [showAIModal, setShowAIModal] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
     // Leader 相關狀態
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
@@ -1729,12 +1730,21 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             <div className="flex flex-wrap gap-2 items-center">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>}
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>}
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+                {!isRegularMember && (
+                    <button onClick={() => setShowFilters(f => !f)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition ${showFilters ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
+                        <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+                    </button>
+                )}
                 {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
                 <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm"><Download size={16} /> 匯出</button>
             </div>
+            {!isRegularMember && showFilters && (
+                <div className="flex flex-wrap gap-2 items-center p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>
+                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                </div>
+            )}
         </div>
         {isEditing && (
             <TaskForm
@@ -1747,8 +1757,10 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 onCancel={() => setIsEditing(false)}
             />
         )}
-        <p className="text-sm text-slate-900">點擊列表可展開詳情</p>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100">
+                <span className="text-xs text-slate-400 flex items-center gap-1"><Info size={12} /> 點擊列可展開詳情</span>
+            </div>
             <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-600">
                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
@@ -1887,7 +1899,7 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
         <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm"><Plus size={16} /> 新增</button>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
@@ -3384,7 +3396,8 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                 </div>
             </div>
 
-            {/* 統計卡片 */}
+            {/* 統計卡片 - 有資料才顯示 */}
+            {stats.total > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                     { label: '全部問題', value: stats.total, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
@@ -3398,10 +3411,13 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                     </div>
                 ))}
             </div>
+            )}
 
             {/* 問題列表 */}
-            <p className="text-sm text-slate-900">點擊列表可展開詳情</p>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100">
+                    <span className="text-xs text-slate-400 flex items-center gap-1"><Info size={12} /> 點擊列可展開詳情</span>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-slate-600">
                         <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
@@ -3778,16 +3794,6 @@ const App = () => {
                         <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
                         <span>Firebase 連線狀態：{connectionStatus}</span>
                     </div>
-                    <div className="flex items-center justify-between mt-2 text-[11px] text-slate-400" data-testid="locale-toggle">
-                        <span>語系</span>
-                        <button
-                            onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))}
-                            className="px-2 py-1 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
-                            data-testid="locale-toggle-button"
-                        >
-                            {locale === 'zh-Hant' ? '简体' : '繁體'}
-                        </button>
-                    </div>
                 </div>
                 <nav className="p-4 space-y-2 flex-1">
                     <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
@@ -3830,6 +3836,16 @@ const App = () => {
                             <LogOut size={14} /> 登出
                         </button>
                     )}
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700 text-[11px] text-slate-400" data-testid="locale-toggle">
+                        <span>語系</span>
+                        <button
+                            onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))}
+                            className="px-2 py-1 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
+                            data-testid="locale-toggle-button"
+                        >
+                            {locale === 'zh-Hant' ? '简体' : '繁體'}
+                        </button>
+                    </div>
                 </div>
             </aside>
             
