@@ -31,6 +31,12 @@ const LOCALE_STORAGE_KEY = "jms-locale";
 const DEFAULT_LOCALE = "zh-Hant";
 const AIVRES_EMAIL_DOMAIN = "@aivres.com";
 const NOTIFICATION_EMAIL_DOMAIN = "@aivres.com";
+const DEFAULT_MEETING_CATEGORIES = ['內部會議', '客戶會議', '專案檢討', '腦力激盪'];
+const DEFAULT_TASK_SOURCES = ['Email', 'Meeting', 'Chat', 'Other'];
+const DEFAULT_TASK_STATUSES = ['Pending', 'On-going', 'Done'];
+const DEFAULT_ISSUE_SOURCES = ['開發', '維護', '客戶', '產線'];
+const DEFAULT_ISSUE_LOCATIONS = ['硬件', '固件', '測試', '其它'];
+const DEFAULT_ISSUE_ESCALATIONS = ['項目組', 'Nvidia', '領導', '技術負責人'];
 
 // --- 1. Firebase Configuration ---
 const DEFAULT_CONFIG = {
@@ -1936,11 +1942,17 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
 
 const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiSettings, testConfig, geminiApiKey, geminiModel, teams = [] }) => {
     const [newCategory, setNewCategory] = useState('');
-    const [categories, setCategories] = useState([]);
+    const [categories, setCategories] = useState(DEFAULT_MEETING_CATEGORIES);
     const [newTaskSource, setNewTaskSource] = useState('');
-    const [taskSources, setTaskSources] = useState([]);
+    const [taskSources, setTaskSources] = useState(DEFAULT_TASK_SOURCES);
     const [newTaskStatus, setNewTaskStatus] = useState('');
-    const [taskStatuses, setTaskStatuses] = useState([]);
+    const [taskStatuses, setTaskStatuses] = useState(DEFAULT_TASK_STATUSES);
+    const [newIssueSource, setNewIssueSource] = useState('');
+    const [issueSources, setIssueSources] = useState(DEFAULT_ISSUE_SOURCES);
+    const [newIssueLocation, setNewIssueLocation] = useState('');
+    const [issueLocations, setIssueLocations] = useState(DEFAULT_ISSUE_LOCATIONS);
+    const [newIssueEscalation, setNewIssueEscalation] = useState('');
+    const [issueEscalations, setIssueEscalations] = useState(DEFAULT_ISSUE_ESCALATIONS);
     const [newAdminEmail, setNewAdminEmail] = useState('');
     const [newEditorEmail, setNewEditorEmail] = useState('');
     const [newAIUserEmail, setNewAIUserEmail] = useState('');
@@ -1981,18 +1993,32 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const userTableColSpan = isAdmin ? 4 : 3;
 
     useEffect(() => {
-        if (!db) return;
+        if (!db) {
+            setCategories(DEFAULT_MEETING_CATEGORIES);
+            setTaskSources(DEFAULT_TASK_SOURCES);
+            setTaskStatuses(DEFAULT_TASK_STATUSES);
+            setIssueSources(DEFAULT_ISSUE_SOURCES);
+            setIssueLocations(DEFAULT_ISSUE_LOCATIONS);
+            setIssueEscalations(DEFAULT_ISSUE_ESCALATIONS);
+            return;
+        }
         const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                setCategories(data.meetingCategories || ['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
-                setTaskSources(data.taskSources || ['Email', 'Meeting', 'Chat', 'Other']);
-                setTaskStatuses(data.taskStatuses || ['Pending', 'On-going', 'Done']);
+                setCategories(data.meetingCategories || DEFAULT_MEETING_CATEGORIES);
+                setTaskSources(data.taskSources || DEFAULT_TASK_SOURCES);
+                setTaskStatuses(data.taskStatuses || DEFAULT_TASK_STATUSES);
+                setIssueSources(data.issueSources || DEFAULT_ISSUE_SOURCES);
+                setIssueLocations(data.issueLocations || DEFAULT_ISSUE_LOCATIONS);
+                setIssueEscalations(data.issueEscalations || DEFAULT_ISSUE_ESCALATIONS);
             } else {
-                setCategories(['內部會議', '客戶會議', '專案檢討', '腦力激盪']);
-                setTaskSources(['Email', 'Meeting', 'Chat', 'Other']);
-                setTaskStatuses(['Pending', 'On-going', 'Done']);
+                setCategories(DEFAULT_MEETING_CATEGORIES);
+                setTaskSources(DEFAULT_TASK_SOURCES);
+                setTaskStatuses(DEFAULT_TASK_STATUSES);
+                setIssueSources(DEFAULT_ISSUE_SOURCES);
+                setIssueLocations(DEFAULT_ISSUE_LOCATIONS);
+                setIssueEscalations(DEFAULT_ISSUE_ESCALATIONS);
             }
         });
         return () => unsubscribe();
@@ -2102,12 +2128,27 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const handleAddItem = async (field, newItem, list, setListState, setNewItemState) => {
         if (!newItem.trim()) return;
         if (list.includes(newItem.trim())) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "此選項已存在", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); return; }
+        if (!db || testConfig?.enabled) {
+            setListState([...list, newItem.trim()]);
+            setNewItemState('');
+            return;
+        }
         try { await setDoc(doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options'), { [field]: arrayUnion(newItem.trim()) }, { merge: true }); setNewItemState(''); } 
         catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: "更新失敗：" + e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
     };
     const confirmDeleteItem = (field, itemToDelete, list) => { setModalConfig({ isOpen: true, type: 'danger', title: '確認刪除', content: `確定要刪除「${itemToDelete}」嗎？`, onConfirm: () => executeDeleteItem(field, itemToDelete, list), onCancel: () => setModalConfig({ isOpen: false }) }); };
     const executeDeleteItem = async (field, itemToDelete, list) => {
         setModalConfig({ isOpen: false });
+        if (!db || testConfig?.enabled) {
+            const updatedList = list.filter(c => c !== itemToDelete);
+            if (field === 'meetingCategories') setCategories(updatedList);
+            if (field === 'taskSources') setTaskSources(updatedList);
+            if (field === 'taskStatuses') setTaskStatuses(updatedList);
+            if (field === 'issueSources') setIssueSources(updatedList);
+            if (field === 'issueLocations') setIssueLocations(updatedList);
+            if (field === 'issueEscalations') setIssueEscalations(updatedList);
+            return;
+        }
         const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
         try {
             const snapshot = await getDoc(settingsRef);
@@ -3073,25 +3114,64 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                 </div>
             )}
 
-            {/* Global Options: Meeting Categories */}
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-emerald-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-emerald-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 會議分類</h2></div></div>
-                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="輸入新分類名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} /><button onClick={() => handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">新增</button></div>)}
-                <div className="flex flex-wrap gap-2">{categories.map((cat, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{cat}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('meetingCategories', cat, categories)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
-            </div>
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="settings-global-options">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-violet-100' : 'bg-slate-100'}`}>
+                        {canEditDropdowns ? <ShieldCheck className="text-violet-700" size={24} /> : <Lock className="text-slate-500" size={24} />}
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800">全域下拉選單管理</h2>
+                        <p className="text-sm text-slate-500 mt-1">把不同頁面的下拉選單集中在同一區塊設定。</p>
+                    </div>
+                </div>
 
-            {/* Global Options: Task Sources */}
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-blue-100' : 'bg-slate-100'}`}>{canEditDropdowns ? <ShieldCheck className="text-blue-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦來源</h2></div></div>
-                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newTaskSource} onChange={(e) => setNewTaskSource(e.target.value)} placeholder="輸入新來源名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} /><button onClick={() => handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新增</button></div>)}
-                <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
-            </div>
+                <div className="space-y-6">
+                    <section className="rounded-xl border border-slate-200 p-5">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4">待辦事項</h3>
+                        <div className="space-y-5">
+                            <div>
+                                <div className="text-sm font-semibold text-slate-600 mb-2">來源清單</div>
+                                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newTaskSource} onChange={(e) => setNewTaskSource(e.target.value)} placeholder="輸入新來源名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} /><button onClick={() => handleAddItem('taskSources', newTaskSource, taskSources, setTaskSources, setNewTaskSource)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新增</button></div>)}
+                                <div className="flex flex-wrap gap-2">{taskSources.map((src, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{src}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('taskSources', src, taskSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm font-semibold text-slate-600 mb-2">狀態清單</div>
+                                {canEditTaskStatuses && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
+                                <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{canEditTaskStatuses && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                            </div>
+                        </div>
+                    </section>
 
-            {/* Global Options: Task Statuses - Admin/Editor Only */}
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-                <div className="flex items-center gap-3 mb-6"><div className={`p-3 rounded-full ${canEditTaskStatuses ? 'bg-indigo-100' : 'bg-slate-100'}`}>{canEditTaskStatuses ? <ShieldCheck className="text-indigo-700" size={24} /> : <Lock className="text-slate-500" size={24} />}</div><div><h2 className="text-xl font-bold text-slate-800">全域下拉選單 - 待辦狀態</h2></div></div>
-                {canEditTaskStatuses && (<div className="flex gap-2 mb-4"><input value={newTaskStatus} onChange={(e) => setNewTaskStatus(e.target.value)} placeholder="輸入新狀態名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} /><button onClick={() => handleAddItem('taskStatuses', newTaskStatus, taskStatuses, setTaskStatuses, setNewTaskStatus)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">新增</button></div>)}
-                <div className="flex flex-wrap gap-2">{taskStatuses.map((st, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{st}</span>{canEditTaskStatuses && <button onClick={() => confirmDeleteItem('taskStatuses', st, taskStatuses)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                    <section className="rounded-xl border border-slate-200 p-5">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4">會議記錄</h3>
+                        <div>
+                            <div className="text-sm font-semibold text-slate-600 mb-2">會議分類</div>
+                            {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="輸入新分類名稱" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} /><button onClick={() => handleAddItem('meetingCategories', newCategory, categories, setCategories, setNewCategory)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">新增</button></div>)}
+                            <div className="flex flex-wrap gap-2">{categories.map((cat, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{cat}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('meetingCategories', cat, categories)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                        </div>
+                    </section>
+
+                    <section className="rounded-xl border border-slate-200 p-5">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4">問題管理</h3>
+                        <div className="space-y-5">
+                            <div>
+                                <div className="text-sm font-semibold text-slate-600 mb-2">問題來源</div>
+                                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newIssueSource} onChange={(e) => setNewIssueSource(e.target.value)} placeholder="輸入新問題來源" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('issueSources', newIssueSource, issueSources, setIssueSources, setNewIssueSource)} /><button onClick={() => handleAddItem('issueSources', newIssueSource, issueSources, setIssueSources, setNewIssueSource)} className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">新增</button></div>)}
+                                <div className="flex flex-wrap gap-2">{issueSources.map((item, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{item}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('issueSources', item, issueSources)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm font-semibold text-slate-600 mb-2">問題定位</div>
+                                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newIssueLocation} onChange={(e) => setNewIssueLocation(e.target.value)} placeholder="輸入新問題定位" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('issueLocations', newIssueLocation, issueLocations, setIssueLocations, setNewIssueLocation)} /><button onClick={() => handleAddItem('issueLocations', newIssueLocation, issueLocations, setIssueLocations, setNewIssueLocation)} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700">新增</button></div>)}
+                                <div className="flex flex-wrap gap-2">{issueLocations.map((item, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{item}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('issueLocations', item, issueLocations)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm font-semibold text-slate-600 mb-2">問題上升</div>
+                                {canEditDropdowns && (<div className="flex gap-2 mb-4"><input value={newIssueEscalation} onChange={(e) => setNewIssueEscalation(e.target.value)} placeholder="輸入新問題上升對象" className="flex-1 p-2 border border-slate-300 rounded-lg" onKeyDown={(e) => e.key === 'Enter' && handleAddItem('issueEscalations', newIssueEscalation, issueEscalations, setIssueEscalations, setNewIssueEscalation)} /><button onClick={() => handleAddItem('issueEscalations', newIssueEscalation, issueEscalations, setIssueEscalations, setNewIssueEscalation)} className="px-4 py-2 bg-fuchsia-600 text-white rounded-lg hover:bg-fuchsia-700">新增</button></div>)}
+                                <div className="flex flex-wrap gap-2">{issueEscalations.map((item, idx) => (<div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 border border-slate-200"><span>{item}</span>{canEditDropdowns && <button onClick={() => confirmDeleteItem('issueEscalations', item, issueEscalations)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>}</div>))}</div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
     );
@@ -3114,11 +3194,15 @@ const issueStatusConfig = {
     '已解決': { color: 'bg-green-100 text-green-700', icon: <CheckCircle2 size={12} /> },
 };
 
-const IssueForm = ({ initialData, onSave, onCancel, assigneeOptions, teams }) => {
+const IssueForm = ({ initialData, onSave, onCancel, assigneeOptions, teams, issueSources, issueLocations, issueEscalations }) => {
     const [form, setForm] = useState({
+        itemName: initialData?.itemName || '',
         title: '',
         description: '',
-        client: '',
+        issueSource: initialData?.issueSource || initialData?.client || '',
+        issueLocation: initialData?.issueLocation || '',
+        issueEscalation: initialData?.issueEscalation || '',
+        nvBugId: initialData?.nvBugId || '',
         status: '處理中',
         assignee: '',
         teamId: '',
@@ -3148,6 +3232,10 @@ const IssueForm = ({ initialData, onSave, onCancel, assigneeOptions, teams }) =>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">項目名稱 <span className="text-red-500">*</span></label>
+                        <input data-testid="issue-form-item-name" value={form.itemName} onChange={e => set('itemName', e.target.value)} placeholder="項目名稱" className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="md:col-span-2">
                         <label className="block text-xs font-semibold text-slate-500 mb-1">標題 <span className="text-red-500">*</span></label>
                         <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="問題標題" className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
@@ -3156,9 +3244,32 @@ const IssueForm = ({ initialData, onSave, onCancel, assigneeOptions, teams }) =>
                         <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="詳細描述問題..." rows={3} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">客戶 / 產線 <span className="text-red-500">*</span></label>
-                        <input value={form.client} onChange={e => set('client', e.target.value)} placeholder="例：客戶A、產線B..." className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">問題來源 <span className="text-red-500">*</span></label>
+                        <select data-testid="issue-form-source" value={form.issueSource} onChange={e => set('issueSource', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">請選擇問題來源</option>
+                            {(issueSources || []).map(item => <option key={item} value={item}>{item}</option>)}
+                        </select>
                     </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">問題定位 <span className="text-red-500">*</span></label>
+                        <select data-testid="issue-form-location" value={form.issueLocation} onChange={e => set('issueLocation', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">請選擇問題定位</option>
+                            {(issueLocations || []).map(item => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">問題上升 <span className="text-red-500">*</span></label>
+                        <select data-testid="issue-form-escalation" value={form.issueEscalation} onChange={e => set('issueEscalation', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">請選擇問題上升</option>
+                            {(issueEscalations || []).map(item => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                    </div>
+                    {form.issueEscalation === 'Nvidia' && (
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">NV_Bug_ID <span className="text-red-500">*</span></label>
+                            <input data-testid="issue-form-nv-bug-id" value={form.nvBugId} onChange={e => set('nvBugId', e.target.value)} placeholder="請輸入 NV Bug ID" className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                    )}
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">狀態 <span className="text-red-500">*</span></label>
                         <select value={form.status} onChange={e => set('status', e.target.value)} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -3221,11 +3332,13 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
                     </span>
                 </td>
                 <td className="px-4 py-3 min-w-[200px]">
+                    <div className="text-xs font-semibold text-slate-400">{issue.itemName || '—'}</div>
                     <div className="font-medium text-slate-800 text-sm">{issue.title}</div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">{issue.client || '—'}</span>
+                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">{issue.issueSource || issue.client || '—'}</span>
                 </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-600">{issue.issueLocation || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{issue.assignee || <span className="text-slate-300">—</span>}</td>
                 <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{createdDate}</td>
                 <td className={`px-4 py-3 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
@@ -3241,9 +3354,13 @@ const IssueRow = ({ issue, onEdit, onDelete, canEdit }) => {
                     )}
                 </td>
             </tr>
-            {expanded && (issue.description || issue.progress) && (
+            {expanded && (issue.description || issue.progress || issue.issueEscalation || issue.nvBugId) && (
                 <tr className="bg-slate-50">
                     <td colSpan={8} className="px-6 py-4 text-sm text-slate-600 border-t border-slate-100 space-y-2">
+                        <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                            <span><span className="font-semibold text-slate-500 mr-1">問題上升：</span>{issue.issueEscalation || '—'}</span>
+                            {issue.nvBugId && <span><span className="font-semibold text-slate-500 mr-1">NV_Bug_ID：</span>{issue.nvBugId}</span>}
+                        </div>
                         {issue.description && <div><span className="font-semibold text-slate-500 mr-2">描述：</span>{issue.description}</div>}
                         {issue.progress && <div><span className="font-semibold text-slate-500 mr-2">進度更新：</span><span className="whitespace-pre-wrap">{issue.progress}</span></div>}
                     </td>
@@ -3257,6 +3374,9 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     const [issues, setIssues] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [currentIssue, setCurrentIssue] = useState(null);
+    const [issueSources, setIssueSources] = useState(DEFAULT_ISSUE_SOURCES);
+    const [issueLocations, setIssueLocations] = useState(DEFAULT_ISSUE_LOCATIONS);
+    const [issueEscalations, setIssueEscalations] = useState(DEFAULT_ISSUE_ESCALATIONS);
     const [filterStatus, setFilterStatus] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [showAIModal, setShowAIModal] = useState(false);
@@ -3281,6 +3401,23 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     const [assigneeOptions, setAssigneeOptions] = useState([]);
 
     // 讀取負責人選項
+    useEffect(() => {
+        if (!db) {
+            setIssueSources(DEFAULT_ISSUE_SOURCES);
+            setIssueLocations(DEFAULT_ISSUE_LOCATIONS);
+            setIssueEscalations(DEFAULT_ISSUE_ESCALATIONS);
+            return;
+        }
+        const settingsRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'options');
+        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            const data = docSnap.exists() ? docSnap.data() : {};
+            setIssueSources(data.issueSources || DEFAULT_ISSUE_SOURCES);
+            setIssueLocations(data.issueLocations || DEFAULT_ISSUE_LOCATIONS);
+            setIssueEscalations(data.issueEscalations || DEFAULT_ISSUE_ESCALATIONS);
+        });
+        return () => unsubscribe();
+    }, [db]);
+
     useEffect(() => {
         if (!db) return;
         const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
@@ -3324,9 +3461,13 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             res = res.filter(i =>
+                i.itemName?.toLowerCase().includes(q) ||
                 i.title?.toLowerCase().includes(q) ||
                 i.description?.toLowerCase().includes(q) ||
-                i.client?.toLowerCase().includes(q) ||
+                (i.issueSource || i.client)?.toLowerCase().includes(q) ||
+                i.issueLocation?.toLowerCase().includes(q) ||
+                i.issueEscalation?.toLowerCase().includes(q) ||
+                i.nvBugId?.toLowerCase().includes(q) ||
                 i.assignee?.toLowerCase().includes(q)
             );
         }
@@ -3342,17 +3483,36 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     }), [issues]);
 
     const handleSave = async (formData) => {
-        if (!formData.title?.trim() || !formData.description?.trim() || !formData.client?.trim() || !formData.status || !formData.dueDate || !formData.progress?.trim() || !formData.assignee || !formData.teamId) {
+        if (
+            !formData.itemName?.trim() ||
+            !formData.title?.trim() ||
+            !formData.description?.trim() ||
+            !formData.issueSource?.trim() ||
+            !formData.issueLocation?.trim() ||
+            !formData.issueEscalation?.trim() ||
+            !formData.status ||
+            !formData.dueDate ||
+            !formData.progress?.trim() ||
+            !formData.assignee ||
+            !formData.teamId ||
+            (formData.issueEscalation === 'Nvidia' && !formData.nvBugId?.trim())
+        ) {
             showError('驗證錯誤', '請填寫所有必填欄位');
             return;
         }
         try {
             const teamName = teams.find(t => t.id === formData.teamId)?.name || '';
+            const payload = {
+                ...formData,
+                client: formData.issueSource,
+                teamName,
+                updatedAt: serverTimestamp()
+            };
             if (formData.id && formData.path) {
-                await updateDoc(doc(db, formData.path), { ...formData, teamName, updatedAt: serverTimestamp() });
+                await updateDoc(doc(db, formData.path), payload);
             } else {
                 const colRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'issues');
-                await addDoc(colRef, { ...formData, teamName, createdByEmail: user.email, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                await addDoc(colRef, { ...payload, createdByEmail: user.email, createdAt: serverTimestamp() });
             }
             setIsEditing(false);
             setCurrentIssue(null);
@@ -3381,8 +3541,12 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
 
     const handleExport = () => {
         const headers = [
-            { key: 'client', label: '客戶/產線' },
+            { key: 'itemName', label: '項目名稱' },
             { key: 'title', label: '標題' },
+            { key: 'issueSource', label: '問題來源' },
+            { key: 'issueLocation', label: '問題定位' },
+            { key: 'issueEscalation', label: '問題上升' },
+            { key: 'nvBugId', label: 'NV_Bug_ID' },
             { key: 'status', label: '狀態' },
             { key: 'assignee', label: '負責人' },
             { key: 'teamName', label: '所屬團隊' },
@@ -3413,6 +3577,9 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                     onCancel={() => { setIsEditing(false); setCurrentIssue(null); }}
                     assigneeOptions={assigneeOptions}
                     teams={userSelectableTeams}
+                    issueSources={issueSources}
+                    issueLocations={issueLocations}
+                    issueEscalations={issueEscalations}
                 />
             )}
 
@@ -3470,12 +3637,13 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                     <span className="text-xs text-slate-400 flex items-center gap-1"><Info size={12} /> 點擊列可展開詳情</span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
+                    <table className="min-w-[900px] w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                             <tr>
                                 <th className="px-4 py-3">狀態</th>
                                 <th className="px-4 py-3 min-w-[200px]">標題</th>
-                                <th className="px-4 py-3">客戶/產線</th>
+                                <th className="px-4 py-3">問題來源</th>
+                                <th className="px-4 py-3">問題定位</th>
                                 <th className="px-4 py-3">負責人</th>
                                 <th className="px-4 py-3">建立日期</th>
                                 <th className="px-4 py-3">截止日期</th>
@@ -3487,7 +3655,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                                 <IssueRow key={issue.id} issue={issue} onEdit={i => { setCurrentIssue(i); setIsEditing(true); }} onDelete={handleDelete} canEdit={canAccessAll || issue.createdByEmail === user?.email} />
                             ))}
                             {filteredIssues.filter(i => i.status !== '已解決').length === 0 && (
-                                <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><AlertCircle size={32} className="mx-auto mb-2 opacity-30" />沒有符合條件的問題</td></tr>
+                                <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-400"><AlertCircle size={32} className="mx-auto mb-2 opacity-30" />沒有符合條件的問題</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -3497,12 +3665,13 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                 <CollapsibleDoneSection title="已解決" defaultExpanded={false}>
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
                         <div className="overflow-x-auto">
-                            <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
+                            <table className="min-w-[900px] w-full text-left text-sm text-slate-600">
                                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                                     <tr>
                                         <th className="px-4 py-3">狀態</th>
                                         <th className="px-4 py-3 min-w-[200px]">標題</th>
-                                        <th className="px-4 py-3">客戶/產線</th>
+                                        <th className="px-4 py-3">問題來源</th>
+                                        <th className="px-4 py-3">問題定位</th>
                                         <th className="px-4 py-3">負責人</th>
                                         <th className="px-4 py-3">建立日期</th>
                                         <th className="px-4 py-3">截止日期</th>

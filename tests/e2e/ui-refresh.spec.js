@@ -61,3 +61,34 @@ test('手機版使用漢堡選單並可切換到待辦頁', async ({ page }) => 
   await expect(page.getByRole('heading', { name: '工作待辦事項' })).toBeVisible();
   await expect(page.getByTestId('mobile-sidebar-overlay')).toHaveCount(0);
 });
+
+test('問題表單提供新的必填欄位，且選到 Nvidia 時顯示 NV Bug ID', async ({ page }) => {
+  await page.goto(`${appUrl}/?testMode=1&testUserEmail=showchen@aivres.com`, { waitUntil: 'domcontentloaded' });
+
+  await page.getByRole('button', { name: '問題管理' }).click();
+  await page.getByRole('button', { name: '新增問題' }).click();
+
+  await expect(page.getByTestId('issue-form-item-name')).toBeVisible();
+  await expect(page.getByTestId('issue-form-source')).toBeVisible();
+  await expect(page.getByTestId('issue-form-location')).toBeVisible();
+  await expect(page.getByTestId('issue-form-escalation')).toBeVisible();
+  await expect(page.getByTestId('issue-form-nv-bug-id')).toHaveCount(0);
+
+  await page.getByTestId('issue-form-escalation').selectOption('Nvidia');
+  await expect(page.getByTestId('issue-form-nv-bug-id')).toBeVisible();
+});
+
+test('設定頁把不同頁面的全域下拉選單集中在同一區塊管理', async ({ page }) => {
+  await page.goto(`${appUrl}/?testMode=1&testUserEmail=showchen@aivres.com`, { waitUntil: 'domcontentloaded' });
+
+  await page.getByRole('button', { name: '系統設定' }).click();
+  const globalOptions = page.getByTestId('settings-global-options');
+  await expect(globalOptions).toBeVisible();
+  await expect(globalOptions.getByRole('heading', { name: '待辦事項' })).toBeVisible();
+  await expect(globalOptions.getByRole('heading', { name: '會議記錄' })).toBeVisible();
+  await expect(globalOptions.getByRole('heading', { name: '問題管理' })).toBeVisible();
+  await expect(globalOptions.getByText('開發', { exact: true })).toBeVisible();
+  await expect(globalOptions.getByText('維護', { exact: true })).toBeVisible();
+  await expect(globalOptions.getByText('客戶', { exact: true })).toBeVisible();
+  await expect(globalOptions.getByText('產線', { exact: true })).toBeVisible();
+});
