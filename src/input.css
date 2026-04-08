@@ -2,9 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
+:root {
+  color-scheme: light;
+  --surface-base: #f6f5f4;
+  --surface-panel: #ffffff;
+  --surface-muted: #fbfaf8;
+  --text-primary: rgba(0, 0, 0, 0.92);
+  --text-secondary: #615d59;
+  --border-soft: rgba(0, 0, 0, 0.1);
+  --accent-primary: #0075de;
+}
+
 body {
-  background-color: #f8fafc;
+  background:
+    radial-gradient(circle at top left, rgba(0, 117, 222, 0.08), transparent 28%),
+    linear-gradient(180deg, #fff 0%, var(--surface-base) 100%);
+  color: var(--text-primary);
+  font-family: Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
 #root {

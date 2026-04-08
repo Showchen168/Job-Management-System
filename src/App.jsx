@@ -954,7 +954,17 @@ const AIConversationModal = ({ isOpen, onClose, rawData, geminiApiKey, geminiMod
 };
 
 const NavButton = ({ active, onClick, icon, label }) => (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>{icon}<span className="font-medium">{label}</span></button>
+    <button
+        onClick={onClick}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+            active
+                ? 'bg-white text-slate-900 border-slate-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]'
+                : 'text-slate-500 border-transparent hover:bg-white/80 hover:border-slate-200 hover:text-slate-900'
+        }`}
+    >
+        <span className={active ? 'text-[#0075de]' : 'text-slate-400'}>{icon}</span>
+        <span className="font-medium">{label}</span>
+    </button>
 );
 
 const CollapsibleDoneSection = ({ title, children, defaultExpanded = false }) => {
@@ -1175,7 +1185,6 @@ const AuthPage = ({ auth, error, connectionStatus }) => {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [resetLoading, setResetLoading] = useState(false);
-
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const code = params.get('oobCode');
@@ -1273,98 +1282,105 @@ const AuthPage = ({ auth, error, connectionStatus }) => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="bg-slate-900 p-8 text-center">
-            <div className="inline-flex p-3 bg-blue-600 rounded-full mb-4 shadow-lg">
-                <Database size={32} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-2">工作紀錄中心</h1>
-            <p className="text-slate-400 text-sm">請登入以存取您的工作資料</p>
-            <p className="text-xs text-slate-500 mt-2" data-testid="firebase-status-auth">Firebase 連線狀態：{connectionStatus}</p>
-            </div>
-            <div className="p-8">
-            {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex gap-2"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
-            {!showForgot && (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Email 信箱</label>
-                    <input
-                        type="email"
-                        required
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                        placeholder={isLogin ? "" : "輸入完整 Email 地址"}
-                        value={isLogin ? email : emailPrefix}
-                        onChange={(e) => isLogin ? setEmail(e.target.value) : setEmailPrefix(e.target.value)}
-                        data-testid="login-email"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">密碼</label>
-                    <input
-                        type="password"
-                        required
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        data-testid="login-password"
-                    />
-                </div>
-                {authError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {authError}</div>}
-                <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                    data-testid="login-submit"
-                >
-                    {loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}
-                </button>
-                {isLogin && <button type="button" onClick={() => { setShowForgot(true); setAuthError(''); setResetMessage(''); setResetError(''); }} className="w-full text-sm text-blue-600 hover:underline">忘記密碼？</button>}
-                </form>
-            )}
-            {showForgot && (
-                <form onSubmit={resetCode ? handleConfirmReset : (e) => { e.preventDefault(); handleSendResetEmail(); }} className="space-y-4">
-                {!resetCode && (
-                    <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">重設信箱</label>
-                    <input type="email" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
-                    <p className="mt-2 text-xs text-slate-500">系統將寄出重設密碼信件。</p>
+        <div className="min-h-screen bg-[#f6f5f4] px-4 py-6 md:px-8 md:py-10">
+            <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-md items-center">
+                <section className="w-full overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.08)]" data-testid="auth-card">
+                    <div className="bg-[#31302e] px-8 py-9 text-center">
+                        <div className="mb-4 inline-flex rounded-full bg-[#f2f9ff] p-4 text-[#0075de] shadow-[0_12px_30px_rgba(0,117,222,0.18)]">
+                            <Database size={32} />
+                        </div>
+                        <h1 className="text-2xl font-bold tracking-[-0.03em] text-white">工作紀錄中心</h1>
+                        <p className="mt-2 text-sm text-[#d4d0cc]">請登入以存取您的工作資料</p>
+                        <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/8 px-3 py-1 text-xs text-[#ebe7e2]" data-testid="firebase-status-auth">
+                            <span className="inline-block h-2 w-2 rounded-full bg-[#62aef0]" />
+                            Firebase 連線狀態：{connectionStatus}
+                        </p>
                     </div>
-                )}
-                {resetCode && (
-                    <>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">新密碼</label>
-                        <input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                    <div className="mx-auto w-full max-w-md">
+                        <div className="p-8">
+                        {error && <div className="mb-4 flex gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-600"><AlertCircle size={16} className="mt-0.5 flex-shrink-0" />{error}</div>}
+                        {!showForgot && (
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-slate-700">Email 信箱</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        className="w-full rounded-2xl border border-black/10 bg-[#fcfcfb] px-4 py-3.5 outline-none transition focus:border-[#0075de] focus:ring-2 focus:ring-[#097fe8]/15"
+                                        placeholder={isLogin ? 'name@company.com' : '輸入完整 Email 地址'}
+                                        value={isLogin ? email : emailPrefix}
+                                        onChange={(e) => isLogin ? setEmail(e.target.value) : setEmailPrefix(e.target.value)}
+                                        data-testid="login-email"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-slate-700">密碼</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        className="w-full rounded-2xl border border-black/10 bg-[#fcfcfb] px-4 py-3.5 outline-none transition focus:border-[#0075de] focus:ring-2 focus:ring-[#097fe8]/15"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        data-testid="login-password"
+                                    />
+                                </div>
+                                {authError && <div className="flex items-center gap-1 text-sm text-red-500"><AlertCircle size={14} /> {authError}</div>}
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0075de] px-4 py-3.5 font-bold text-white transition hover:bg-[#005bab] disabled:opacity-50"
+                                    data-testid="login-submit"
+                                >
+                                    {loading && <Loader2 size={18} className="animate-spin" />}{isLogin ? '登入系統' : '註冊帳號'}
+                                </button>
+                                {isLogin && <button type="button" onClick={() => { setShowForgot(true); setAuthError(''); setResetMessage(''); setResetError(''); }} className="w-full text-sm text-[#0075de] hover:underline">忘記密碼？</button>}
+                            </form>
+                        )}
+                        {showForgot && (
+                            <form onSubmit={resetCode ? handleConfirmReset : (e) => { e.preventDefault(); handleSendResetEmail(); }} className="space-y-4">
+                                {!resetCode && (
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium text-slate-700">重設信箱</label>
+                                        <input type="email" required className="w-full rounded-2xl border border-black/10 bg-[#fcfcfb] px-4 py-3.5 outline-none transition focus:border-[#0075de] focus:ring-2 focus:ring-[#097fe8]/15" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
+                                        <p className="mt-2 text-xs text-slate-500">系統將寄出重設密碼信件。</p>
+                                    </div>
+                                )}
+                                {resetCode && (
+                                    <>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-slate-700">新密碼</label>
+                                            <input type="password" required className="w-full rounded-2xl border border-black/10 bg-[#fcfcfb] px-4 py-3.5 outline-none transition focus:border-[#0075de] focus:ring-2 focus:ring-[#097fe8]/15" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-sm font-medium text-slate-700">確認新密碼</label>
+                                            <input type="password" required className="w-full rounded-2xl border border-black/10 bg-[#fcfcfb] px-4 py-3.5 outline-none transition focus:border-[#0075de] focus:ring-2 focus:ring-[#097fe8]/15" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                                        </div>
+                                    </>
+                                )}
+                                {resetMessage && <div className="flex items-center gap-1 text-sm text-emerald-600"><CheckCircle2 size={14} /> {resetMessage}</div>}
+                                {resetError && <div className="flex items-center gap-1 text-sm text-red-500"><AlertCircle size={14} /> {resetError}</div>}
+                                <button type="submit" disabled={resetLoading} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0075de] px-4 py-3.5 font-bold text-white transition hover:bg-[#005bab] disabled:opacity-50">{resetLoading && <Loader2 size={18} className="animate-spin" />}{resetCode ? '更新密碼' : '寄送重設信件'}</button>
+                                <button type="button" onClick={() => { setShowForgot(false); setResetMessage(''); setResetError(''); setResetCode(''); }} className="w-full text-sm text-slate-500 hover:underline">返回登入</button>
+                            </form>
+                        )}
+                        <div className="mt-6 border-t border-black/10 pt-5 text-center text-sm text-slate-500">
+                            {isLogin ? '還沒有帳號？' : '已經有帳號了？'}
+                            <button
+                                onClick={() => {
+                                    setIsLogin(!isLogin);
+                                    setAuthError('');
+                                    setEmail('');
+                                    setEmailPrefix('');
+                                }}
+                                className="ml-2 font-bold text-[#0075de] hover:underline"
+                            >
+                                {isLogin ? '立即註冊' : '返回登入'}
+                            </button>
+                        </div>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">確認新密碼</label>
-                        <input type="password" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                    </div>
-                    </>
-                )}
-                {resetMessage && <div className="text-emerald-600 text-sm flex items-center gap-1"><CheckCircle2 size={14} /> {resetMessage}</div>}
-                {resetError && <div className="text-red-500 text-sm flex items-center gap-1"><AlertCircle size={14} /> {resetError}</div>}
-                <button type="submit" disabled={resetLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50">{resetLoading && <Loader2 size={18} className="animate-spin" />}{resetCode ? '更新密碼' : '寄送重設信件'}</button>
-                <button type="button" onClick={() => { setShowForgot(false); setResetMessage(''); setResetError(''); setResetCode(''); }} className="w-full text-sm text-slate-500 hover:underline">返回登入</button>
-                </form>
-            )}
-            <div className="mt-6 text-center text-sm text-slate-500">
-                {isLogin ? '還沒有帳號？' : '已經有帳號了？'}
-                <button
-                    onClick={() => {
-                        setIsLogin(!isLogin);
-                        setAuthError('');
-                        setEmail('');
-                        setEmailPrefix('');
-                    }}
-                    className="ml-2 text-blue-600 font-bold hover:underline"
-                >
-                    {isLogin ? '立即註冊' : '返回登入'}
-                </button>
+                </section>
             </div>
-            </div>
-        </div>
         </div>
     );
 };
@@ -1376,8 +1392,8 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
 
     useEffect(() => {
         if (!db || !user) return;
-        const qTasks = canAccessAll 
-            ? query(collectionGroup(db, 'tasks')) 
+        const qTasks = canAccessAll
+            ? query(collectionGroup(db, 'tasks'))
             : query(collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks'));
         const unsubTasks = onSnapshot(qTasks, (snapshot) => {
             let t = 0; let sources = {}; let statuses = {}; let assignees = {}; let assigneeStatuses = {};
@@ -1410,7 +1426,6 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
             let open = 0; let overdue = 0; let resolved = 0;
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // 權限篩選
                 if (!canAccessAll && data.createdByEmail !== user.email) return;
                 total++;
                 const st = data.status || '未定義';
@@ -1432,63 +1447,61 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
 
     return (
         <div className="space-y-6 animate-in fade-in">
-            <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> 數據看板</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View (All Data)' : 'Editor View (All Data)'}</span>}</div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><div className="text-slate-500 text-sm font-bold uppercase mb-2">總待辦事項</div><div className="text-4xl font-bold text-slate-800">{taskStats.total}</div></div>
+            <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-[#0075de]"/> 數據看板</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View (All Data)' : 'Editor View (All Data)'}</span>}</div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]"><div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">總待辦事項</div><div className="text-4xl font-bold tracking-[-0.04em] text-slate-800">{taskStats.total}</div></div>
                 {Object.entries(taskStats.byStatus).slice(0, 3).map(([status, count], i) => {
-                    const colors = ['bg-yellow-50 border-yellow-200 text-yellow-800', 'bg-blue-50 border-blue-200 text-blue-800', 'bg-green-50 border-green-200 text-green-800'];
-                    return (<div key={status} className={`p-6 rounded-xl shadow-sm border ${colors[i % colors.length]}`}><div className="text-sm font-bold uppercase mb-2 opacity-80">{status}</div><div className="text-4xl font-bold">{count}</div></div>);
+                    const colors = ['bg-[#fff8eb] border-yellow-200 text-yellow-800', 'bg-[#eef6ff] border-blue-200 text-blue-800', 'bg-[#eff8f1] border-green-200 text-green-800'];
+                    return (<div key={status} className={`rounded-[24px] border p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)] ${colors[i % colors.length]}`}><div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] opacity-80">{status}</div><div className="text-4xl font-bold tracking-[-0.04em]">{count}</div></div>);
                 })}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart3 size={20}/> 待辦事項來源分析</h3>
-                    <div className="space-y-3">{Object.keys(taskStats.bySource).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(taskStats.bySource).map(([src, count]) => (<div key={src}><div className="flex justify-between text-sm mb-1"><span className="text-slate-600">{src}</span><span className="font-bold text-slate-800">{count}</span></div><div className="w-full bg-slate-100 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(count / taskStats.total) * 100}%` }}></div></div></div>))}</div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]">
+                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800"><BarChart3 size={20}/> 待辦事項來源分析</h3>
+                    <div className="space-y-3">{Object.keys(taskStats.bySource).length === 0 ? <p className="text-sm text-slate-400">暫無資料</p> : Object.entries(taskStats.bySource).map(([src, count]) => (<div key={src}><div className="mb-1 flex justify-between text-sm"><span className="text-slate-600">{src}</span><span className="font-bold text-slate-800">{count}</span></div><div className="h-2 w-full rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-500" style={{ width: `${(count / taskStats.total) * 100}%` }}></div></div></div>))}</div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><PieChart size={20}/> 會議類型統計</h3>
-                    <div className="flex items-center justify-between mb-6"><div><div className="text-3xl font-bold text-slate-800">{meetingStats.total}</div><div className="text-xs text-slate-500">總會議場次</div></div><div className="p-3 bg-emerald-100 rounded-full text-emerald-600"><Users size={24}/></div></div>
-                    <div className="space-y-2">{Object.keys(meetingStats.byCategory).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(meetingStats.byCategory).map(([cat, count]) => (<div key={cat} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100"><span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>{cat}</span><span className="font-mono font-bold text-slate-700">{count}</span></div>))}</div>
+                <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]">
+                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800"><PieChart size={20}/> 會議類型統計</h3>
+                    <div className="mb-6 flex items-center justify-between"><div><div className="text-3xl font-bold text-slate-800">{meetingStats.total}</div><div className="text-xs text-slate-500">總會議場次</div></div><div className="rounded-full bg-emerald-100 p-3 text-emerald-600"><Users size={24}/></div></div>
+                    <div className="space-y-2">{Object.keys(meetingStats.byCategory).length === 0 ? <p className="text-sm text-slate-400">暫無資料</p> : Object.entries(meetingStats.byCategory).map(([cat, count]) => (<div key={cat} className="flex items-center justify-between rounded border border-transparent p-2 text-sm hover:border-slate-100 hover:bg-slate-50"><span className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-emerald-500"></div>{cat}</span><span className="font-mono font-bold text-slate-700">{count}</span></div>))}</div>
                 </div>
             </div>
-
-            {/* 問題管理統計 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle size={20} className="text-red-500"/> 問題管理概覽</h3>
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]">
+                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800"><AlertCircle size={20} className="text-red-500"/> 問題管理概覽</h3>
+                    <div className="mb-4 grid grid-cols-2 gap-3">
                         {[
                             { label: '全部問題', value: issueStats.total, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
                             { label: '未解決', value: issueStats.open, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
                             { label: '已逾期', value: issueStats.overdue, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
                             { label: '已解決/關閉', value: issueStats.resolved, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
                         ].map(card => (
-                            <div key={card.label} className={`${card.bg} border ${card.border} rounded-xl p-4`}>
+                            <div key={card.label} className={`${card.bg} border ${card.border} rounded-[20px] p-4`}>
                                 <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-                                <div className="text-xs text-slate-500 mt-1">{card.label}</div>
+                                <div className="mt-1 text-xs text-slate-500">{card.label}</div>
                             </div>
                         ))}
                     </div>
                     <div className="space-y-2">
-                        {Object.keys(issueStats.byStatus).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(issueStats.byStatus).map(([st, count]) => (
-                            <div key={st} className="flex justify-between items-center text-sm p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100">
-                                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-400"></div>{st}</span>
+                        {Object.keys(issueStats.byStatus).length === 0 ? <p className="text-sm text-slate-400">暫無資料</p> : Object.entries(issueStats.byStatus).map(([st, count]) => (
+                            <div key={st} className="flex items-center justify-between rounded border border-transparent p-2 text-sm hover:border-slate-100 hover:bg-slate-50">
+                                <span className="flex items-center gap-2"><div className="h-2 w-2 rounded-full bg-red-400"></div>{st}</span>
                                 <span className="font-mono font-bold text-slate-700">{count}</span>
                             </div>
                         ))}
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Briefcase size={20} className="text-orange-500"/> 客戶/產線問題分佈</h3>
+                <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]">
+                    <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800"><Briefcase size={20} className="text-orange-500"/> 客戶/產線問題分佈</h3>
                     <div className="space-y-3">
-                        {Object.keys(issueStats.byClient).length === 0 ? <p className="text-slate-400 text-sm">暫無資料</p> : Object.entries(issueStats.byClient).sort((a, b) => b[1] - a[1]).map(([client, count]) => (
+                        {Object.keys(issueStats.byClient).length === 0 ? <p className="text-sm text-slate-400">暫無資料</p> : Object.entries(issueStats.byClient).sort((a, b) => b[1] - a[1]).map(([client, count]) => (
                             <div key={client}>
-                                <div className="flex justify-between text-sm mb-1">
+                                <div className="mb-1 flex justify-between text-sm">
                                     <span className="text-slate-600">{client}</span>
                                     <span className="font-bold text-slate-800">{count}</span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2">
-                                    <div className="bg-orange-400 h-2 rounded-full" style={{ width: `${(count / issueStats.total) * 100}%` }}></div>
+                                <div className="h-2 w-full rounded-full bg-slate-100">
+                                    <div className="h-2 rounded-full bg-orange-400" style={{ width: `${(count / issueStats.total) * 100}%` }}></div>
                                 </div>
                             </div>
                         ))}
@@ -1725,7 +1738,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                     <h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>
                     {canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}
                 </div>
-                <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+                <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm"><Plus size={16} /> 新增</button>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
@@ -1899,7 +1912,7 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
         <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm"><Plus size={16} /> 新增</button>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
                 <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
@@ -3414,7 +3427,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                             </span>
                         )}
                     </div>
-                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md text-sm">
+                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm">
                         <Plus size={16} /> 新增問題
                     </button>
                 </div>
@@ -3820,39 +3833,45 @@ const App = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 font-sans text-slate-800 flex flex-col md:flex-row" data-testid="app-shell">
-            <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
-                <div className="p-6 border-b border-slate-700">
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                        <Database className="text-blue-400" />
+        <div className="min-h-screen bg-[#f6f5f4] font-sans text-slate-800 md:flex" data-testid="app-shell">
+            <aside className="w-full border-b border-black/10 bg-[#fbfaf8] md:min-h-screen md:w-72 md:border-b-0 md:border-r">
+                <div className="flex h-full flex-col">
+                <div className="p-6">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+                        <span className="inline-block h-2 w-2 rounded-full bg-[#0075de]" />
+                        Workspace
+                    </div>
+                    <h1 className="mt-4 text-2xl font-bold tracking-[-0.04em] flex items-center gap-2 text-slate-900">
+                        <Database className="text-[#0075de]" />
                         工作紀錄中心
                         <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
                     </h1>
-                    <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-2" data-testid="firebase-status">
-                        <span className={`inline-block w-2 h-2 rounded-full ${connectionIndicatorClass}`} />
+                    <p className="mt-2 text-sm leading-6 text-[#615d59]">把任務、問題與會議集中在同一個工作區。</p>
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm" data-testid="firebase-status">
+                        <span className={`inline-block h-2 w-2 rounded-full ${connectionIndicatorClass}`} />
                         <span>Firebase 連線狀態：{connectionStatus}</span>
                     </div>
                 </div>
-                <nav className="p-4 space-y-2 flex-1">
+                <nav className="px-4 pb-4 space-y-2 flex-1">
                     <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
                     <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
                     <NavButton active={activeTab === 'issues'} onClick={() => setActiveTab('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
                     <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
                 </nav>
-                <div className="p-4 bg-slate-800 border-t border-slate-700">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                <div className="mx-4 mb-4 rounded-[24px] border border-black/10 bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.04)]">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-full bg-[#eef6ff] text-[#0075de] flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
                         </div>
                         <div className="overflow-hidden flex-1">
-                            <div className="text-sm font-bold truncate" data-testid="user-display-name">{userDisplayName}</div>
+                            <div className="text-sm font-bold truncate text-slate-900" data-testid="user-display-name">{userDisplayName}</div>
                             <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                 {isUserAdmin ? (
-                                    <span className="text-yellow-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
+                                    <span className="text-yellow-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
                                 ) : isUserEditor ? (
-                                    <span className="text-blue-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
+                                    <span className="text-blue-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
                                 ) : isUserLeader ? (
-                                    <span className="text-teal-400 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
+                                    <span className="text-teal-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
                                 ) : (
                                     'User'
                                 )}
@@ -3861,7 +3880,7 @@ const App = () => {
                         {canAccessSettings && (
                             <button
                                 onClick={() => setActiveTab('settings')}
-                                className={`p-1.5 rounded-lg transition flex-shrink-0 ${activeTab === 'settings' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                                className={`p-2 rounded-xl transition flex-shrink-0 ${activeTab === 'settings' ? 'bg-[#0075de] text-white' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
                                 title="系統設定"
                             >
                                 <Settings size={16} />
@@ -3870,24 +3889,26 @@ const App = () => {
                     </div>
                     
                     {!testConfig.enabled && auth && (
-                        <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition">
+                        <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-600 transition">
                             <LogOut size={14} /> 登出
                         </button>
                     )}
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700 text-[11px] text-slate-400" data-testid="locale-toggle">
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/10 text-[11px] text-slate-400" data-testid="locale-toggle">
                         <span>語系</span>
                         <button
                             onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))}
-                            className="px-2 py-1 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
                             data-testid="locale-toggle-button"
                         >
                             {locale === 'zh-Hant' ? '简体' : '繁體'}
                         </button>
                     </div>
                 </div>
+                </div>
             </aside>
             
-            <main className="flex-1 overflow-y-auto h-screen p-4 md:p-8 relative bg-slate-50/50">
+            <main className="flex-1 overflow-y-auto md:h-screen" data-testid="workspace-shell">
+                <div className="mx-auto max-w-7xl p-4 md:p-8">
                 {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                 {activeTab === 'tasks' && (
                     <TaskManager
@@ -3915,6 +3936,7 @@ const App = () => {
                         </div>
                     )
                 )}
+                </div>
             </main>
         </div>
     );
