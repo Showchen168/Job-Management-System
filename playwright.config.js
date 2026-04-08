@@ -7,7 +7,7 @@ module.exports = defineConfig({
     headless: true
   },
   webServer: {
-    command: 'python -m http.server 4173',
+    command: 'npx vite preview',
     port: 4173,
     reuseExistingServer: true,
     timeout: 120000

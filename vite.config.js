@@ -6,12 +6,17 @@ export default defineConfig({
   base: '/Job-Management-System/',
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    sourcemap: process.env.NODE_ENV !== 'production',
   },
   server: {
     port: 5173,
   },
   preview: {
     port: 4173,
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test-setup.js',
   },
 })

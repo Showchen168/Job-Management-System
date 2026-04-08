@@ -2,16 +2,8 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
-
-const DEFAULT_CONFIG = {
-    apiKey: "AIzaSyAGezrKXfKSwvh1Aauy-wrTr53e_WtuXVE",
-    authDomain: "job-management-system-16741.firebaseapp.com",
-    projectId: "job-management-system-16741",
-    storageBucket: "job-management-system-16741.firebasestorage.app",
-    messagingSenderId: "1042345096032",
-    appId: "1:1042345096032:web:853c2d9c35c06b7dd9a405",
-    measurementId: "G-FM8QW4LJ2T"
-};
+import { DEFAULT_CONFIG } from './constants';
+import logger from './utils/logger';
 
 /**
  * 改进的Firebase初始化函数
@@ -23,7 +15,7 @@ export const initFirebaseImproved = async (setters) => {
     const { setAppInstance, setAuth, setDb, setConnectionStatus, setError, setIsAuthChecking } = setters;
 
     try {
-        console.log('[Firebase] Starting initialization...');
+        logger.log('[Firebase] Starting initialization...');
 
         // Step 1: Initialize Firebase App
         const APP_NAME = 'work-tracker-app';
@@ -31,38 +23,38 @@ export const initFirebaseImproved = async (setters) => {
         const existingApp = getApps().find(app => app.name === APP_NAME);
 
         if (existingApp) {
-            console.log('[Firebase] Using existing app instance');
+            logger.log('[Firebase] Using existing app instance');
             app = existingApp;
         } else {
-            console.log('[Firebase] Creating new app instance');
+            logger.log('[Firebase] Creating new app instance');
             app = initializeApp(DEFAULT_CONFIG, APP_NAME);
         }
 
-        console.log('[Firebase] App initialized:', {
+        logger.log('[Firebase] App initialized:', {
             name: app.name,
             projectId: app.options.projectId
         });
 
         // Step 2: Initialize Auth
-        console.log('[Firebase] Initializing Auth...');
+        logger.log('[Firebase] Initializing Auth...');
         const authInstance = getAuth(app);
 
         // Step 3: Initialize Firestore
-        console.log('[Firebase] Initializing Firestore...');
+        logger.log('[Firebase] Initializing Firestore...');
         const dbInstance = getFirestore(app);
 
         // Step 4: Test Firestore connection
-        console.log('[Firebase] Testing Firestore connection...');
+        logger.log('[Firebase] Testing Firestore connection...');
         const testDocRef = doc(dbInstance, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'connection');
 
         try {
             const docSnap = await getDoc(testDocRef);
 
             if (docSnap.exists()) {
-                console.log('[Firebase] ✅ Connection document exists');
-                console.log('[Firebase] Document data:', docSnap.data());
+                logger.log('[Firebase] Connection document exists');
+                logger.log('[Firebase] Document data:', docSnap.data());
             } else {
-                console.warn('[Firebase] ⚠️ Connection document does not exist, creating...');
+                logger.warn('[Firebase] Connection document does not exist, creating...');
 
                 // Try to create the document
                 try {
@@ -71,22 +63,22 @@ export const initFirebaseImproved = async (setters) => {
                         lastUpdated: new Date().toISOString(),
                         createdBy: 'auto-init'
                     });
-                    console.log('[Firebase] ✅ Connection document created');
+                    logger.log('[Firebase] Connection document created');
                 } catch (createErr) {
-                    console.error('[Firebase] ⚠️ Could not create connection document:', createErr.message);
-                    console.error('[Firebase] Error code:', createErr.code);
+                    logger.error('[Firebase] Could not create connection document:', createErr.message);
+                    logger.error('[Firebase] Error code:', createErr.code);
 
                     if (createErr.code === 'permission-denied') {
-                        console.error('[Firebase] 🔒 Permission denied. Please check Firestore Security Rules.');
-                        console.error('[Firebase] Make sure the rules allow read/write access to /artifacts/work-tracker-v1/public/**');
+                        logger.error('[Firebase] Permission denied. Please check Firestore Security Rules.');
+                        logger.error('[Firebase] Make sure the rules allow read/write access to /artifacts/work-tracker-v1/public/**');
                     }
                 }
             }
 
-            console.log('[Firebase] ✅ Firestore connection successful');
+            logger.log('[Firebase] Firestore connection successful');
         } catch (testErr) {
-            console.error('[Firebase] ❌ Firestore connection test failed:', testErr.message);
-            console.error('[Firebase] Error code:', testErr.code);
+            logger.error('[Firebase] Firestore connection test failed:', testErr.message);
+            logger.error('[Firebase] Error code:', testErr.code);
 
             // Provide specific guidance based on error code
             if (testErr.code === 'permission-denied') {
@@ -106,12 +98,12 @@ export const initFirebaseImproved = async (setters) => {
         setDb(dbInstance);
         setConnectionStatus(navigator.onLine ? '連線中...' : '離線');
 
-        console.log('[Firebase] ✅ Initialization complete');
+        logger.log('[Firebase] Initialization complete');
         return { app, auth: authInstance, db: dbInstance };
 
     } catch (err) {
-        console.error('[Firebase] ❌ Initialization failed:', err);
-        console.error('[Firebase] Error details:', {
+        logger.error('[Firebase] Initialization failed:', err);
+        logger.error('[Firebase] Error details:', {
             message: err.message,
             code: err.code,
             stack: err.stack
@@ -149,12 +141,12 @@ export const ensureFirestoreDocuments = async (db) => {
         try {
             const docSnap = await getDoc(docRef);
             if (!docSnap.exists()) {
-                console.log(`[Firebase] Creating document: ${path.join('/')}`);
+                logger.log(`[Firebase] Creating document: ${path.join('/')}`);
                 await setDoc(docRef, data);
-                console.log(`[Firebase] ✅ Document created: ${path.join('/')}`);
+                logger.log(`[Firebase] Document created: ${path.join('/')}`);
             }
         } catch (err) {
-            console.error(`[Firebase] ⚠️ Could not ensure document ${path.join('/')}: ${err.message}`);
+            logger.error(`[Firebase] Could not ensure document ${path.join('/')}: ${err.message}`);
         }
     }
 };

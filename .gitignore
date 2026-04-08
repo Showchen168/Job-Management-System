@@ -1,3 +1,8 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
 # Dependencies
 node_modules/
 
@@ -16,3 +21,4 @@ package-lock.json
 .DS_Store
 Thumbs.db
 .gstack/
+diagnose-firebase.js

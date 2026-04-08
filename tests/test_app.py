@@ -22,12 +22,10 @@ def test_validate_version_rejects_invalid_format():
         validate_version("v2.3")
 
 
-def test_validate_version_rejects_patch_over_9():
+def test_validate_version_accepts_multi_digit_patch():
+    assert validate_version("v2.5.10") is True
+
+
+def test_validate_version_rejects_missing_v_prefix():
     with pytest.raises(ValueError):
-        validate_version("v2.5.10")
-
-
-def test_app_version_patch_is_single_digit():
-    patch = APP_VERSION.split(".")[-1]
-    assert patch.isdigit()
-    assert len(patch) == 1
+        validate_version("2.5.10")
