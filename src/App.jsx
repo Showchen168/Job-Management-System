@@ -17,7 +17,7 @@ import {
 } from 'firebase/auth';
 
 import { 
-    CheckCircle2, Clock, AlertCircle, Calendar, Users, FileText, Settings, Plus, Save, X, Edit2, Trash2, Link as LinkIcon, ChevronRight, Database, RefreshCw, Check, ShieldAlert, Download, List, Search, ArrowRightLeft, LogIn, LogOut, UserPlus, Loader2, ExternalLink, ShieldCheck, Lock, UserCog, Image as ImageIcon, Info, User, Filter, Briefcase, LayoutDashboard, BarChart3, PieChart, Activity, Sparkles, Bot, Copy 
+    CheckCircle2, Clock, AlertCircle, Calendar, Users, FileText, Settings, Plus, Save, X, Edit2, Trash2, Link as LinkIcon, ChevronRight, Database, RefreshCw, Check, ShieldAlert, Download, List, Search, ArrowRightLeft, LogIn, LogOut, UserPlus, Loader2, ExternalLink, ShieldCheck, Lock, UserCog, Image as ImageIcon, Info, User, Filter, Briefcase, LayoutDashboard, BarChart3, PieChart, Activity, Sparkles, Bot, Copy, Menu
 } from 'lucide-react';
 import * as OpenCC from 'opencc-js';
 import { marked } from 'marked';
@@ -1733,29 +1733,29 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             dataType="tasks"
         />
         <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>
                     {canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}
                 </div>
-                <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+                <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0075de] px-4 py-2 text-sm text-white shadow-md transition hover:bg-[#005bab] sm:w-auto"><Plus size={16} /> 新增</button>
             </div>
-            <div className="flex flex-wrap gap-2 items-center">
-                <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Filter size={16} className="text-slate-400" /><select className="outline-none text-sm w-24 bg-transparent" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto"><Search size={16} className="text-slate-400" /><input className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-24" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                 {!isRegularMember && (
-                    <button onClick={() => setShowFilters(f => !f)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition ${showFilters ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
+                    <button onClick={() => setShowFilters(f => !f)} className={`flex w-full items-center justify-center gap-1 rounded-lg border px-3 py-1.5 text-sm transition sm:w-auto ${showFilters ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
                         <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
                     </button>
                 )}
-                {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
-                <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm"><Download size={16} /> 匯出</button>
+                {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 sm:w-auto">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
+                <button onClick={handleExport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm transition hover:bg-slate-50 sm:w-auto"><Download size={16} /> 匯出</button>
             </div>
             {!isRegularMember && showFilters && (
-                <div className="flex flex-wrap gap-2 items-center p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>
-                    <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap sm:items-center">
+                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>
+                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
                 </div>
             )}
         </div>
@@ -1775,7 +1775,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 <span className="text-xs text-slate-400 flex items-center gap-1"><Info size={12} /> 點擊列可展開詳情</span>
             </div>
             <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-slate-600">
+            <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                 <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                 </thead>
@@ -1790,7 +1790,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             <CollapsibleDoneSection title="已完成" defaultExpanded={false}>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
                     <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-600">
+                    <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                         <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                         </thead>
@@ -1910,15 +1910,15 @@ const MeetingMinutes = ({ db, user, canAccessAll, isAdmin, isRootAdmin, geminiAp
             dataType="meetings"
         />
         <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
-                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm"><Plus size={16} /> 新增</button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2"><h2 className="text-2xl font-bold text-slate-800">會議記錄工具</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}</div>
+                <button onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0075de] px-4 py-2 text-sm text-white shadow-md transition hover:bg-[#005bab] sm:w-auto"><Plus size={16} /> 新增</button>
             </div>
-            <div className="flex flex-wrap gap-2 items-center">
-                <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm"><Search size={16} className="text-slate-400" /><input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>}
-                {!isRegularMember && <select className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-                {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto"><Search size={16} className="text-slate-400" /><input className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                {!isRegularMember && <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</select>}
+                {!isRegularMember && <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+                {(isAdmin || canUseAI) && <button onClick={handleGenerateMeetingReport} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 sm:w-auto">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
             </div>
         </div>
         {isEditing && (
@@ -3418,8 +3418,8 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
 
             {/* 頁首 */}
             <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-2xl font-bold text-slate-800">問題管理</h2>
                         {canAccessAll && (
                             <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
@@ -3427,21 +3427,21 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                             </span>
                         )}
                     </div>
-                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex items-center gap-2 bg-[#0075de] text-white px-4 py-2 rounded-lg hover:bg-[#005bab] transition shadow-md text-sm">
+                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0075de] px-4 py-2 text-sm text-white shadow-md transition hover:bg-[#005bab] sm:w-auto">
                         <Plus size={16} /> 新增問題
                     </button>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                    <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto">
                         <Search size={16} className="text-slate-400" />
-                        <input className="outline-none text-sm w-32" placeholder="搜尋..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                        <input className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                     </div>
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 shadow-sm text-sm">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto">
                         <option value="All">全部狀態</option>
                         {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm"><Sparkles size={16} /> AI 總結</button>}
-                    <button onClick={handleExport} className="flex items-center gap-2 bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm text-sm">
+                    {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 sm:w-auto"><Sparkles size={16} /> AI 總結</button>}
+                    <button onClick={handleExport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm transition hover:bg-slate-50 sm:w-auto">
                         <Download size={16} /> 匯出
                     </button>
                 </div>
@@ -3470,7 +3470,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                     <span className="text-xs text-slate-400 flex items-center gap-1"><Info size={12} /> 點擊列可展開詳情</span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-600">
+                    <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                             <tr>
                                 <th className="px-4 py-3">狀態</th>
@@ -3497,7 +3497,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                 <CollapsibleDoneSection title="已解決" defaultExpanded={false}>
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden opacity-75">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left text-slate-600">
+                            <table className="min-w-[760px] w-full text-left text-sm text-slate-600">
                                 <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
                                     <tr>
                                         <th className="px-4 py-3">狀態</th>
@@ -3541,6 +3541,8 @@ const App = () => {
     const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
     const localeConvertersRef = useRef(null);
     const originalLocaleTextRef = useRef(new WeakMap());
     const isLocaleUpdatingRef = useRef(false);
@@ -3752,6 +3754,24 @@ const App = () => {
         registerUser();
     }, [db, user, testConfig.enabled]);
 
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [activeTab]);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        handleResize();
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    useEffect(() => {
+        document.body.style.overflow = isMobileMenuOpen ? 'hidden' : '';
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [isMobileMenuOpen]);
+
     const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
     const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
     const isUserCanUseAI = useMemo(() => checkCanUseAI(user, cloudAIUsers), [user, cloudAIUsers]);
@@ -3782,6 +3802,11 @@ const App = () => {
             },
             { merge: true }
         );
+    };
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        setIsMobileMenuOpen(false);
     };
 
     if (isAuthChecking) {
@@ -3834,31 +3859,55 @@ const App = () => {
 
     return (
         <div className="min-h-screen bg-[#f6f5f4] font-sans text-slate-800 md:flex" data-testid="app-shell">
-            <aside className="w-full border-b border-black/10 bg-[#fbfaf8] md:min-h-screen md:w-72 md:border-b-0 md:border-r">
+            {isMobileMenuOpen && (
+                <button
+                    type="button"
+                    aria-label="關閉選單"
+                    className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px] md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    data-testid="mobile-sidebar-overlay"
+                />
+            )}
+            <aside
+                className="fixed inset-y-0 left-0 z-50 w-[min(86vw,20rem)] border-r border-black/10 bg-[#fbfaf8] transition-transform duration-200 md:static md:min-h-screen md:w-72 md:border-b-0"
+                style={{
+                    left: isMobileViewport && !isMobileMenuOpen ? 'calc(min(86vw, 20rem) * -1 - 1px)' : undefined,
+                    transform: isMobileViewport ? 'translateX(0)' : undefined
+                }}
+            >
                 <div className="flex h-full flex-col">
-                <div className="p-6">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
-                        <span className="inline-block h-2 w-2 rounded-full bg-[#0075de]" />
-                        Workspace
+                    <div className="flex items-center justify-between border-b border-black/10 px-5 py-4 md:hidden">
+                        <div className="flex items-center gap-2 text-base font-bold text-slate-900">
+                            <Database className="text-[#0075de]" size={18} />
+                            工作紀錄中心
+                        </div>
+                        <button
+                            type="button"
+                            aria-label="關閉選單"
+                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
-                    <h1 className="mt-4 text-2xl font-bold tracking-[-0.04em] flex items-center gap-2 text-slate-900">
-                        <Database className="text-[#0075de]" />
-                        工作紀錄中心
-                        <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
-                    </h1>
-                    <p className="mt-2 text-sm leading-6 text-[#615d59]">把任務、問題與會議集中在同一個工作區。</p>
-                    <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm" data-testid="firebase-status">
-                        <span className={`inline-block h-2 w-2 rounded-full ${connectionIndicatorClass}`} />
-                        <span>Firebase 連線狀態：{connectionStatus}</span>
+                    <div className="p-6">
+                        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[-0.04em] text-slate-900">
+                            <Database className="text-[#0075de]" />
+                            工作紀錄中心
+                            <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
+                        </h1>
+                        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm" data-testid="firebase-status">
+                            <span className={`inline-block h-2 w-2 rounded-full ${connectionIndicatorClass}`} />
+                            <span>Firebase 連線狀態：{connectionStatus}</span>
+                        </div>
                     </div>
-                </div>
-                <nav className="px-4 pb-4 space-y-2 flex-1">
-                    <NavButton active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
-                    <NavButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
-                    <NavButton active={activeTab === 'issues'} onClick={() => setActiveTab('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
-                    <NavButton active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} icon={<Users size={20} />} label="會議記錄" />
-                </nav>
-                <div className="mx-4 mb-4 rounded-[24px] border border-black/10 bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.04)]">
+                    <nav className="flex-1 space-y-2 px-4 pb-4">
+                        <NavButton active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
+                        <NavButton active={activeTab === 'tasks'} onClick={() => handleTabChange('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
+                        <NavButton active={activeTab === 'issues'} onClick={() => handleTabChange('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
+                        <NavButton active={activeTab === 'meetings'} onClick={() => handleTabChange('meetings')} icon={<Users size={20} />} label="會議記錄" />
+                    </nav>
+                    <div className="mx-4 mb-4 rounded-[24px] border border-black/10 bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.04)]">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-full bg-[#eef6ff] text-[#0075de] flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
@@ -3903,11 +3952,32 @@ const App = () => {
                             {locale === 'zh-Hant' ? '简体' : '繁體'}
                         </button>
                     </div>
-                </div>
+                    </div>
                 </div>
             </aside>
             
             <main className="flex-1 overflow-y-auto md:h-screen" data-testid="workspace-shell">
+                <div className="sticky top-0 z-30 flex items-center justify-between border-b border-black/10 bg-[#f6f5f4]/95 px-4 py-3 backdrop-blur md:hidden">
+                    <div className="min-w-0">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">工作紀錄中心</div>
+                        <div className="truncate text-base font-bold text-slate-900">
+                            {activeTab === 'dashboard' && '數據看板'}
+                            {activeTab === 'tasks' && '待辦事項'}
+                            {activeTab === 'issues' && '問題管理'}
+                            {activeTab === 'meetings' && '會議記錄'}
+                            {activeTab === 'settings' && '系統設定'}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        aria-label="開啟選單"
+                        className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-sm"
+                        onClick={() => setIsMobileMenuOpen(true)}
+                        data-testid="mobile-menu-button"
+                    >
+                        <Menu size={18} />
+                    </button>
+                </div>
                 <div className="mx-auto max-w-7xl p-4 md:p-8">
                 {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                 {activeTab === 'tasks' && (

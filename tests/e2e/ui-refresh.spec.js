@@ -23,6 +23,8 @@ test('主看板顯示新版工作總覽區', async ({ page }) => {
   await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 60000 });
   await expect(page.getByTestId('workspace-shell')).toBeVisible();
   await expect(page.getByTestId('dashboard-intro')).toHaveCount(0);
+  await expect(page.getByText('Workspace')).toHaveCount(0);
+  await expect(page.getByText('把任務、問題與會議集中在同一個工作區。')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '數據看板' })).toBeVisible();
 });
 
@@ -40,4 +42,22 @@ test('待辦、會議、問題頁不顯示新增的工作區標題區', async ({
   await page.getByRole('button', { name: '問題管理' }).click();
   await expect(page.getByTestId('issues-intro')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '問題管理' })).toBeVisible();
+});
+
+test('手機版使用漢堡選單並可切換到待辦頁', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appUrl}/?testMode=1&testUserEmail=showchen@aivres.com`, { waitUntil: 'domcontentloaded' });
+
+  await expect(page.getByTestId('mobile-menu-button')).toBeVisible();
+  await expect(page.getByTestId('mobile-sidebar-overlay')).toHaveCount(0);
+  const sidebarBox = await page.locator('aside').boundingBox();
+  expect(sidebarBox).not.toBeNull();
+  expect(sidebarBox.x + sidebarBox.width).toBeLessThanOrEqual(1);
+
+  await page.getByTestId('mobile-menu-button').click();
+  await expect(page.getByTestId('mobile-sidebar-overlay')).toBeVisible();
+
+  await page.getByRole('button', { name: '待辦事項' }).click();
+  await expect(page.getByRole('heading', { name: '工作待辦事項' })).toBeVisible();
+  await expect(page.getByTestId('mobile-sidebar-overlay')).toHaveCount(0);
 });
