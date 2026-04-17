@@ -3,20 +3,47 @@ import {
     collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import {
-    Plus, Search, Filter, ChevronRight, Download, Loader2, Sparkles, Info
+    Plus, Search, Filter, ChevronRight, Download, Info
 } from 'lucide-react';
 import TaskForm from './TaskForm';
 import TaskRow from './TaskRow';
 import Modal from '../common/Modal';
-import AIConversationModal from '../AIConversationModal';
 import CollapsibleDoneSection from '../common/CollapsibleDoneSection';
+import {
+    StandardToolbar,
+    StandardToolbarButton,
+    StandardToolbarField,
+    StandardToolbarInput,
+    StandardToolbarSelect,
+} from '../common/StandardToolbar';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
 import { formatEmailPrefix, getTeamLeaders } from '../../utils/permissions';
+import {
+    buildAssignmentNotification,
+    buildNotificationTargetKey,
+    buildUserDirectoryMap,
+    resolveDirectoryUser,
+} from '../../utils/notifications-center';
+import { pushNotification } from '../../utils/notification-store';
 import { ROOT_ADMINS } from '../../constants';
 import { exportToCSV } from '../../utils/csv-export';
 import logger from '../../utils/logger';
+import { deleteDemoEntity, upsertDemoEntity } from '../../mock/demo-store';
 
-const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey, geminiModel, canUseAI, teams = [] }) => {
+const TaskManager = ({
+    db,
+    user,
+    canAccessAll,
+    isAdmin,
+    testConfig,
+    teams = [],
+    focusTarget,
+    onFocusHandled,
+    demoMode = false,
+    demoState = null,
+    onDemoStateChange = () => {},
+    unreadCommentCountMap = {},
+}) => {
     const [tasks, setTasks] = useState([]);
     const [filteredTasks, setFilteredTasks] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -25,15 +52,13 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     const [taskSources, setTaskSources] = useState(['Email', 'Meeting', 'Chat', 'Other']);
     const [taskStatuses, setTaskStatuses] = useState(['Pending', 'On-going', 'Done']);
     const [assigneeOptions, setAssigneeOptions] = useState([]);
+    const [userDirectoryMap, setUserDirectoryMap] = useState({});
     const isRootAdmin = ROOT_ADMINS.includes(user?.email);
-    const [aiLoading, setAiLoading] = useState(false);
-    const [aiReport, setAiReport] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterSource, setFilterSource] = useState('All');
     const [filterAssignee, setFilterAssignee] = useState('All');
     const [filterTeam, setFilterTeam] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
-    const [showAIModal, setShowAIModal] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
 
     const { isLeader, teamMemberEmails, isRegularMember, userSelectableTeams, filterableTeams } = useTeamAccess(user, teams, canAccessAll);
@@ -54,6 +79,41 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     }, [canAccessAll, user, assigneeOptions, userSelectableTeams]);
 
     useEffect(() => {
+        if (demoMode) {
+            if (!demoState || !user) return;
+            let data = [...(demoState.tasks || [])];
+            const userEmailPrefix = formatEmailPrefix(user.email);
+
+            if (!canAccessAll) {
+                if (isLeader && teamMemberEmails.length > 0) {
+                    data = data.filter(task => {
+                        const isOwnTask = task.createdByEmail === user.email;
+                        const isAssignedToMe = task.assignee === userEmailPrefix || task.assigneeEmail === user.email;
+                        const isCreatedByMember = teamMemberEmails.includes(task.createdByEmail);
+                        const isAssignedToMember = teamMemberEmails.map(e => formatEmailPrefix(e)).includes(task.assignee)
+                            || teamMemberEmails.includes(task.assigneeEmail);
+
+                        if (isOwnTask) return true;
+                        if (isAssignedToMe && (isOwnTask || isCreatedByMember)) return true;
+                        if (isCreatedByMember) return true;
+                        if (isOwnTask && isAssignedToMember) return true;
+
+                        return false;
+                    });
+                } else {
+                    data = data.filter(task =>
+                        task.createdByEmail === user.email ||
+                        task.assignee === userEmailPrefix ||
+                        task.assigneeEmail === user.email
+                    );
+                }
+            }
+
+            data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            setTasks(data);
+            return;
+        }
+
         if (!db || !user) return;
 
         // 所有用戶都使用全域查詢，以便能看到被指派的任務
@@ -91,7 +151,7 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
             setTasks(data);
         }, (error) => logger.error("Error tasks:", error));
         return () => unsubscribe();
-    }, [db, user, canAccessAll, isLeader, teamMemberEmails]);
+    }, [db, user, canAccessAll, isLeader, teamMemberEmails, demoMode, demoState]);
 
     useEffect(() => {
         if (!db) return;
@@ -110,8 +170,16 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 .split(',')
                 .map((item) => item.trim())
                 .filter(Boolean);
-            const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-            setAssigneeOptions(uniqueAssignees);
+            if (demoMode && demoState) {
+                const users = demoState.users || [];
+                const options = users.map((entry) => formatEmailPrefix(entry.email));
+                setAssigneeOptions(Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant')));
+                setUserDirectoryMap(buildUserDirectoryMap(users));
+            } else {
+                const uniqueAssignees = Array.from(new Set(parsed)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+                setAssigneeOptions(uniqueAssignees);
+                setUserDirectoryMap({});
+            }
             return;
         }
         if (!db) return;
@@ -120,17 +188,28 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
         const unsubscribe = onSnapshot(
             q,
             (snapshot) => {
+                const users = snapshot.docs.map((docSnap) => ({ uid: docSnap.id, ...docSnap.data() }));
                 const options = snapshot.docs
                     .map((docSnap) => docSnap.data()?.email)
                     .filter(Boolean)
                     .map((email) => formatEmailPrefix(email));
                 const uniqueOptions = Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
                 setAssigneeOptions(uniqueOptions);
+                setUserDirectoryMap(buildUserDirectoryMap(users));
             },
             (error) => logger.error("Error assignees:", error)
         );
         return () => unsubscribe();
-    }, [db, testConfig?.enabled]);
+    }, [db, testConfig?.enabled, demoMode, demoState]);
+
+    useEffect(() => {
+        if (!focusTarget || focusTarget.targetType !== 'task') return;
+        setFilterStatus('All');
+        setFilterSource('All');
+        setFilterAssignee('All');
+        setFilterTeam('All');
+        setSearchQuery('');
+    }, [focusTarget]);
 
     useEffect(() => {
         let res = tasks;
@@ -142,26 +221,67 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
         setFilteredTasks(res);
     }, [tasks, filterStatus, filterSource, filterAssignee, filterTeam, searchQuery]);
 
-    const handleGenerateReport = () => {
-        if (!filteredTasks.length) {
-            setModalConfig({ isOpen: true, type: 'confirm', title: '無資料', content: "目前列表為空。", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
-            return;
-        }
-        setShowAIModal(true);
-    };
-
     const handleSave = async (formData) => {
         if (!formData.title?.trim() || !formData.teamId || !formData.assignee?.trim() || !formData.source || !formData.status || !formData.assignedDate || !formData.dueDate || !formData.progress?.trim()) {
             setModalConfig({ isOpen: true, type: 'danger', title: '驗證錯誤', content: "請填寫所有必填欄位", onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "好", onCancel: null });
             return;
         }
         try {
+        if (demoMode) {
+            const assigneeRecord = resolveDirectoryUser(userDirectoryMap, formData.assignee);
+            const teamName = teams.find((team) => team.id === formData.teamId)?.name || '';
+            onDemoStateChange((current) => upsertDemoEntity(current, {
+                entityType: 'task',
+                actorEmail: user.email,
+                formData: {
+                    ...formData,
+                    assigneeEmail: assigneeRecord?.email || '',
+                    teamName,
+                },
+            }));
+            setIsEditing(false); setCurrentTask(null);
+            return;
+        }
+
+        const assigneeRecord = resolveDirectoryUser(userDirectoryMap, formData.assignee);
+        const teamName = teams.find((team) => team.id === formData.teamId)?.name || '';
+        const payload = {
+            ...formData,
+            assigneeEmail: assigneeRecord?.email || '',
+            teamName,
+            updatedAt: serverTimestamp(),
+        };
+        let notification = null;
+
         if (formData.id && formData.path) {
             const docRef = doc(db, formData.path);
-            await updateDoc(docRef, { ...formData, updatedAt: serverTimestamp() });
+            const previousAssigneeEmail = currentTask?.assigneeEmail || resolveDirectoryUser(userDirectoryMap, currentTask?.assignee)?.email || '';
+            await updateDoc(docRef, payload);
+            if (payload.assigneeEmail && payload.assigneeEmail !== previousAssigneeEmail) {
+                notification = buildAssignmentNotification({
+                    entityType: 'task',
+                    item: { ...currentTask, ...payload, id: formData.id, path: formData.path },
+                    actorEmail: user.email,
+                    receiverEmail: payload.assigneeEmail,
+                });
+            }
         } else {
             const collectionRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks');
-            await addDoc(collectionRef, { ...formData, updatedAt: serverTimestamp(), createdAt: serverTimestamp(), createdByEmail: user.email });
+            const docRef = await addDoc(collectionRef, {
+                ...payload,
+                createdAt: serverTimestamp(),
+                createdByEmail: user.email,
+            });
+            notification = buildAssignmentNotification({
+                entityType: 'task',
+                item: { ...payload, id: docRef.id, path: docRef.path },
+                actorEmail: user.email,
+                receiverEmail: payload.assigneeEmail,
+            });
+        }
+
+        if (notification) {
+            await pushNotification({ db, userDirectoryMap, notification });
         }
         setIsEditing(false); setCurrentTask(null);
         } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
@@ -173,6 +293,13 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
 
     const executeDelete = async (task) => {
         setModalConfig({ isOpen: false });
+        if (demoMode) {
+            onDemoStateChange((current) => deleteDemoEntity(current, {
+                entityType: 'task',
+                itemId: task.id,
+            }));
+            return;
+        }
         try {
         if (task.path) { await deleteDoc(doc(db, task.path)); } else { await deleteDoc(doc(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'tasks', task.id)); }
         } catch (e) { setModalConfig({ isOpen: true, type: 'danger', title: '錯誤', content: e.message, onConfirm: () => setModalConfig({ isOpen: false }), confirmText: "關閉", onCancel: null }); }
@@ -196,39 +323,56 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
     return (
         <div className="space-y-6 animate-in fade-in">
         <Modal {...modalConfig} />
-        <AIConversationModal
-            isOpen={showAIModal}
-            onClose={() => setShowAIModal(false)}
-            rawData={filteredTasks}
-            geminiApiKey={geminiApiKey}
-            geminiModel={geminiModel}
-            dataType="tasks"
-        />
         <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-2xl font-bold text-slate-800">工作待辦事項</h2>
-                    {canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View' : 'Editor View'}</span>}
-                </div>
-                <button onClick={() => { setCurrentTask(null); setIsEditing(true); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0075de] px-4 py-2 text-sm text-white shadow-md transition hover:bg-[#005bab] sm:w-auto"><Plus size={16} /> 新增</button>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto"><Search size={16} className="text-slate-400" /><input className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto"><Filter size={16} className="text-slate-400" /><select className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-24" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}><option value="All">全部狀態</option>{taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                {!isRegularMember && (
-                    <button onClick={() => setShowFilters(f => !f)} className={`flex w-full items-center justify-center gap-1 rounded-lg border px-3 py-1.5 text-sm transition sm:w-auto ${showFilters ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
-                        <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
-                    </button>
+            <StandardToolbar
+                testId="task-toolbar"
+                actions={(
+                    <>
+                        {!isRegularMember && (
+                            <StandardToolbarButton
+                                type="button"
+                                onClick={() => setShowFilters(f => !f)}
+                                className={showFilters ? 'bg-slate-50 text-slate-700' : ''}
+                            >
+                                <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+                            </StandardToolbarButton>
+                        )}
+                        <StandardToolbarButton type="button" onClick={handleExport}>
+                            <Download size={16} /> 匯出
+                        </StandardToolbarButton>
+                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentTask(null); setIsEditing(true); }}>
+                            <Plus size={16} /> 新增
+                        </StandardToolbarButton>
+                    </>
                 )}
-                {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 sm:w-auto">{aiLoading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />} AI 總結</button>}
-                <button onClick={handleExport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm transition hover:bg-slate-50 sm:w-auto"><Download size={16} /> 匯出</button>
-            </div>
+            >
+                <StandardToolbarField icon={<Search size={16} />}>
+                    <StandardToolbarInput
+                        placeholder="搜尋..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="sm:w-40"
+                    />
+                </StandardToolbarField>
+                <StandardToolbarField icon={<Filter size={16} />}>
+                    <StandardToolbarSelect value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="sm:w-28">
+                        <option value="All">全部狀態</option>
+                        {taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </StandardToolbarSelect>
+                </StandardToolbarField>
+            </StandardToolbar>
             {!isRegularMember && showFilters && (
-                <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex sm:flex-wrap sm:items-center">
-                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</select>
-                    <select className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-                </div>
+                <StandardToolbar testId="task-advanced-toolbar">
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="sm:w-28"><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</StandardToolbarSelect>
+                    </StandardToolbarField>
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="sm:w-32"><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</StandardToolbarSelect>
+                    </StandardToolbarField>
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} className="sm:w-32"><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</StandardToolbarSelect>
+                    </StandardToolbarField>
+                </StandardToolbar>
             )}
         </div>
         {isEditing && (
@@ -252,7 +396,26 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                 <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                {filteredTasks.filter(t => !t.status?.toLowerCase().includes('done') && !t.status?.toLowerCase().includes('完成')).map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
+                {filteredTasks.filter(t => !t.status?.toLowerCase().includes('done') && !t.status?.toLowerCase().includes('完成')).map(task => (
+                    <TaskRow
+                        key={task.id}
+                        task={task}
+                        onEdit={() => { setCurrentTask(task); setIsEditing(true); }}
+                        onDelete={() => confirmDelete(task)}
+                        db={db}
+                        user={user}
+                        userDirectoryMap={userDirectoryMap}
+                        focusTarget={focusTarget}
+                        onFocusHandled={onFocusHandled}
+                        demoMode={demoMode}
+                        onDemoStateChange={onDemoStateChange}
+                        unreadCommentCount={unreadCommentCountMap[buildNotificationTargetKey({
+                            targetType: 'task',
+                            targetId: task.id,
+                            targetPath: task.path,
+                        })] || 0}
+                    />
+                ))}
                 {filteredTasks.filter(t => !t.status?.toLowerCase().includes('done') && !t.status?.toLowerCase().includes('完成')).length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-400">沒有資料</td></tr>}
                 </tbody>
             </table>
@@ -267,7 +430,26 @@ const TaskManager = ({ db, user, canAccessAll, isAdmin, testConfig, geminiApiKey
                         <tr><th className="px-6 py-3">狀態</th><th className="px-6 py-3">來源</th><th className="px-6 py-3 min-w-[200px]">事項內容 (建立者)</th><th className="px-6 py-3">負責人</th><th className="px-6 py-3">交辦日期</th><th className="px-6 py-3">預計完成</th><th className="px-6 py-3 text-right">操作</th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                        {filteredTasks.filter(t => t.status?.toLowerCase().includes('done') || t.status?.toLowerCase().includes('完成')).map(task => (<TaskRow key={task.id} task={task} onEdit={() => { setCurrentTask(task); setIsEditing(true); }} onDelete={() => confirmDelete(task)} />))}
+                        {filteredTasks.filter(t => t.status?.toLowerCase().includes('done') || t.status?.toLowerCase().includes('完成')).map(task => (
+                            <TaskRow
+                                key={task.id}
+                                task={task}
+                                onEdit={() => { setCurrentTask(task); setIsEditing(true); }}
+                                onDelete={() => confirmDelete(task)}
+                                db={db}
+                                user={user}
+                                userDirectoryMap={userDirectoryMap}
+                                focusTarget={focusTarget}
+                                onFocusHandled={onFocusHandled}
+                                demoMode={demoMode}
+                                onDemoStateChange={onDemoStateChange}
+                                unreadCommentCount={unreadCommentCountMap[buildNotificationTargetKey({
+                                    targetType: 'task',
+                                    targetId: task.id,
+                                    targetPath: task.path,
+                                })] || 0}
+                            />
+                        ))}
                         </tbody>
                     </table>
                     </div>

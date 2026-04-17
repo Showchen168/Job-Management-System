@@ -3,22 +3,47 @@ import {
     collection, collectionGroup, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp
 } from 'firebase/firestore';
 import {
-    Plus, Search, Download, Sparkles, AlertCircle, Info
+    Plus, Search, Filter, Download, AlertCircle, Info
 } from 'lucide-react';
 import IssueForm from './IssueForm';
 import IssueRow from './IssueRow';
 import { ISSUE_STATUSES } from './issueConstants';
 import Modal from '../common/Modal';
-import AIConversationModal from '../AIConversationModal';
 import CollapsibleDoneSection from '../common/CollapsibleDoneSection';
+import {
+    StandardToolbar,
+    StandardToolbarButton,
+    StandardToolbarField,
+    StandardToolbarInput,
+    StandardToolbarSelect,
+} from '../common/StandardToolbar';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
 import { useModal } from '../../hooks/useModal';
 import { formatEmailPrefix, getTeamLeaders, checkIsLeader, getLeaderTeamMembers } from '../../utils/permissions';
+import {
+    buildAssignmentNotification,
+    buildNotificationTargetKey,
+    buildUserDirectoryMap,
+    resolveDirectoryUser,
+} from '../../utils/notifications-center';
+import { pushNotification } from '../../utils/notification-store';
 import { exportToCSV } from '../../utils/csv-export';
 import { DEFAULT_ISSUE_SOURCES, DEFAULT_ISSUE_LOCATIONS, DEFAULT_ISSUE_ESCALATIONS } from '../../constants';
 import logger from '../../utils/logger';
+import { deleteDemoEntity, upsertDemoEntity } from '../../mock/demo-store';
 
-const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKey, geminiModel, canUseAI }) => {
+const IssueManager = ({
+    db,
+    user,
+    canAccessAll,
+    teams = [],
+    focusTarget,
+    onFocusHandled,
+    demoMode = false,
+    demoState = null,
+    onDemoStateChange = () => {},
+    unreadCommentCountMap = {},
+}) => {
     const [issues, setIssues] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [currentIssue, setCurrentIssue] = useState(null);
@@ -27,7 +52,6 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     const [issueEscalations, setIssueEscalations] = useState(DEFAULT_ISSUE_ESCALATIONS);
     const [filterStatus, setFilterStatus] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
-    const [showAIModal, setShowAIModal] = useState(false);
     const { modalConfig, showError, showConfirm } = useModal();
 
     // 權限相關
@@ -47,6 +71,7 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     }, [canAccessAll, user, teams]);
 
     const [assigneeOptions, setAssigneeOptions] = useState([]);
+    const [userDirectoryMap, setUserDirectoryMap] = useState({});
 
     // 讀取負責人選項
     useEffect(() => {
@@ -67,39 +92,92 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     }, [db]);
 
     useEffect(() => {
+        if (demoMode) {
+            if (!demoState) return;
+            const users = demoState.users || [];
+            const opts = Array.from(new Set(
+                users.map((entry) => entry.email).filter(Boolean).map((email) => formatEmailPrefix(email))
+            )).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+            setAssigneeOptions(opts);
+            setUserDirectoryMap(buildUserDirectoryMap(users));
+            return;
+        }
         if (!db) return;
         const usersRef = collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users');
         const q = query(usersRef, orderBy('lastSeen', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            const users = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
             const opts = Array.from(new Set(
                 snapshot.docs.map(d => d.data()?.email).filter(Boolean).map(e => formatEmailPrefix(e))
             )).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
             setAssigneeOptions(opts);
+            setUserDirectoryMap(buildUserDirectoryMap(users));
         });
         return () => unsubscribe();
-    }, [db]);
+    }, [db, demoMode, demoState]);
 
     // 讀取問題列表
     useEffect(() => {
+        if (demoMode) {
+            if (!demoState || !user) return;
+            let data = [...(demoState.issues || [])];
+            const userPrefix = formatEmailPrefix(user.email);
+            if (!canAccessAll) {
+                if (isLeader && teamMemberEmails.length > 0) {
+                    const teamPrefixes = teamMemberEmails.map(email => formatEmailPrefix(email));
+                    data = data.filter(issue => {
+                        const isOwn = issue.createdByEmail === user.email;
+                        const isAssignedToMe = issue.assignee === userPrefix || issue.assigneeEmail === user.email;
+                        const isCreatedByMember = teamMemberEmails.includes(issue.createdByEmail);
+                        const isAssignedToMember = teamPrefixes.includes(issue.assignee) || teamMemberEmails.includes(issue.assigneeEmail);
+                        return isOwn || isAssignedToMe || isCreatedByMember || isAssignedToMember;
+                    });
+                } else {
+                    data = data.filter(issue =>
+                        issue.createdByEmail === user.email ||
+                        issue.assignee === userPrefix ||
+                        issue.assigneeEmail === user.email
+                    );
+                }
+            }
+            data.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            setIssues(data);
+            return;
+        }
         if (!db || !user) return;
         const q = query(collectionGroup(db, 'issues'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             let data = snapshot.docs.map(d => ({ id: d.id, path: d.ref.path, ...d.data() }));
+            const userPrefix = formatEmailPrefix(user.email);
             if (!canAccessAll) {
                 if (isLeader && teamMemberEmails.length > 0) {
+                    const teamPrefixes = teamMemberEmails.map(email => formatEmailPrefix(email));
+                    data = data.filter(issue => {
+                        const isOwn = issue.createdByEmail === user.email;
+                        const isAssignedToMe = issue.assignee === userPrefix || issue.assigneeEmail === user.email;
+                        const isCreatedByMember = teamMemberEmails.includes(issue.createdByEmail);
+                        const isAssignedToMember = teamPrefixes.includes(issue.assignee) || teamMemberEmails.includes(issue.assigneeEmail);
+                        return isOwn || isAssignedToMe || isCreatedByMember || isAssignedToMember;
+                    });
+                } else {
                     data = data.filter(issue =>
                         issue.createdByEmail === user.email ||
-                        teamMemberEmails.includes(issue.createdByEmail)
+                        issue.assignee === userPrefix ||
+                        issue.assigneeEmail === user.email
                     );
-                } else {
-                    data = data.filter(issue => issue.createdByEmail === user.email);
                 }
             }
             data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setIssues(data);
         }, err => logger.error('Issues error:', err));
         return () => unsubscribe();
-    }, [db, user, canAccessAll, isLeader, teamMemberEmails]);
+    }, [db, user, canAccessAll, isLeader, teamMemberEmails, demoMode, demoState]);
+
+    useEffect(() => {
+        if (!focusTarget || focusTarget.targetType !== 'issue') return;
+        setFilterStatus('All');
+        setSearchQuery('');
+    }, [focusTarget]);
 
     const filteredIssues = useMemo(() => {
         let res = issues;
@@ -120,14 +198,6 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
         return res;
     }, [issues, filterStatus, searchQuery]);
 
-    // 統計數字
-    const stats = useMemo(() => ({
-        total: issues.length,
-        open: issues.filter(i => i.status !== '已解決').length,
-        overdue: issues.filter(i => i.dueDate && i.status !== '已解決' && new Date(i.dueDate) < new Date()).length,
-        resolved: issues.filter(i => i.status === '已解決').length,
-    }), [issues]);
-
     const handleSave = async (formData) => {
         if (
             !formData.itemName?.trim() ||
@@ -147,18 +217,56 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
             return;
         }
         try {
+            if (demoMode) {
+                const assigneeRecord = resolveDirectoryUser(userDirectoryMap, formData.assignee);
+                const teamName = teams.find(t => t.id === formData.teamId)?.name || '';
+                onDemoStateChange((current) => upsertDemoEntity(current, {
+                    entityType: 'issue',
+                    actorEmail: user.email,
+                    formData: {
+                        ...formData,
+                        client: formData.issueSource,
+                        assigneeEmail: assigneeRecord?.email || '',
+                        teamName,
+                    },
+                }));
+                setIsEditing(false);
+                setCurrentIssue(null);
+                return;
+            }
+            const assigneeRecord = resolveDirectoryUser(userDirectoryMap, formData.assignee);
             const teamName = teams.find(t => t.id === formData.teamId)?.name || '';
             const payload = {
                 ...formData,
                 client: formData.issueSource,
+                assigneeEmail: assigneeRecord?.email || '',
                 teamName,
                 updatedAt: serverTimestamp()
             };
+            let notification = null;
             if (formData.id && formData.path) {
                 await updateDoc(doc(db, formData.path), payload);
+                const previousAssigneeEmail = currentIssue?.assigneeEmail || resolveDirectoryUser(userDirectoryMap, currentIssue?.assignee)?.email || '';
+                if (payload.assigneeEmail && payload.assigneeEmail !== previousAssigneeEmail) {
+                    notification = buildAssignmentNotification({
+                        entityType: 'issue',
+                        item: { ...currentIssue, ...payload, id: formData.id, path: formData.path },
+                        actorEmail: user.email,
+                        receiverEmail: payload.assigneeEmail,
+                    });
+                }
             } else {
                 const colRef = collection(db, 'artifacts', 'work-tracker-v1', 'users', user.uid, 'issues');
-                await addDoc(colRef, { ...payload, createdByEmail: user.email, createdAt: serverTimestamp() });
+                const docRef = await addDoc(colRef, { ...payload, createdByEmail: user.email, createdAt: serverTimestamp() });
+                notification = buildAssignmentNotification({
+                    entityType: 'issue',
+                    item: { ...payload, id: docRef.id, path: docRef.path },
+                    actorEmail: user.email,
+                    receiverEmail: payload.assigneeEmail,
+                });
+            }
+            if (notification) {
+                await pushNotification({ db, userDirectoryMap, notification });
             }
             setIsEditing(false);
             setCurrentIssue(null);
@@ -169,20 +277,19 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
 
     const handleDelete = (issue) => {
         showConfirm('確認刪除', `確定要刪除「${issue.title}」？`, async () => {
+            if (demoMode) {
+                onDemoStateChange((current) => deleteDemoEntity(current, {
+                    entityType: 'issue',
+                    itemId: issue.id,
+                }));
+                return;
+            }
             try {
                 await deleteDoc(doc(db, issue.path));
             } catch (e) {
                 showError('刪除失敗', e.message);
             }
         });
-    };
-
-    const handleGenerateReport = () => {
-        if (!filteredIssues.length) {
-            showError('無資料', '目前列表為空。');
-            return;
-        }
-        setShowAIModal(true);
     };
 
     const handleExport = () => {
@@ -206,14 +313,6 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
     return (
         <div className="space-y-6 animate-in fade-in">
             <Modal {...modalConfig} />
-            <AIConversationModal
-                isOpen={showAIModal}
-                onClose={() => setShowAIModal(false)}
-                rawData={filteredIssues}
-                geminiApiKey={geminiApiKey}
-                geminiModel={geminiModel}
-                dataType="tasks"
-            />
 
             {/* 新增/編輯 Modal */}
             {isEditing && (
@@ -229,53 +328,34 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                 />
             )}
 
-            {/* 頁首 */}
-            <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-2xl font-bold text-slate-800">問題管理</h2>
-                        {canAccessAll && (
-                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>
-                                {isAdmin ? 'Admin View' : 'Editor View'}
-                            </span>
-                        )}
-                    </div>
-                    <button onClick={() => { setCurrentIssue(null); setIsEditing(true); }} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0075de] px-4 py-2 text-sm text-white shadow-md transition hover:bg-[#005bab] sm:w-auto">
-                        <Plus size={16} /> 新增問題
-                    </button>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                    <div className="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 shadow-sm sm:w-auto">
-                        <Search size={16} className="text-slate-400" />
-                        <input className="w-full min-w-0 bg-transparent text-sm outline-none sm:w-32" placeholder="搜尋..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                    </div>
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm sm:w-auto">
+            <StandardToolbar
+                testId="issue-toolbar"
+                actions={(
+                    <>
+                        <StandardToolbarButton type="button" onClick={handleExport}>
+                            <Download size={16} /> 匯出
+                        </StandardToolbarButton>
+                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentIssue(null); setIsEditing(true); }}>
+                            <Plus size={16} /> 新增問題
+                        </StandardToolbarButton>
+                    </>
+                )}
+            >
+                <StandardToolbarField icon={<Search size={16} />}>
+                    <StandardToolbarInput
+                        placeholder="搜尋..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="sm:w-40"
+                    />
+                </StandardToolbarField>
+                <StandardToolbarField icon={<Filter size={16} />}>
+                    <StandardToolbarSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="sm:w-28">
                         <option value="All">全部狀態</option>
                         {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    {(isAdmin || canUseAI) && <button onClick={handleGenerateReport} className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-purple-700 sm:w-auto"><Sparkles size={16} /> AI 總結</button>}
-                    <button onClick={handleExport} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm transition hover:bg-slate-50 sm:w-auto">
-                        <Download size={16} /> 匯出
-                    </button>
-                </div>
-            </div>
-
-            {/* 統計卡片 - 有資料才顯示 */}
-            {stats.total > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                    { label: '全部問題', value: stats.total, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-slate-200' },
-                    { label: '未解決', value: stats.open, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
-                    { label: '已逾期', value: stats.overdue, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
-                    { label: '已解決/關閉', value: stats.resolved, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
-                ].map(card => (
-                    <div key={card.label} className={`${card.bg} border ${card.border} rounded-xl p-4`}>
-                        <div className={`text-3xl font-bold ${card.color}`}>{card.value}</div>
-                        <div className="text-sm text-slate-500 mt-1">{card.label}</div>
-                    </div>
-                ))}
-            </div>
-            )}
+                    </StandardToolbarSelect>
+                </StandardToolbarField>
+            </StandardToolbar>
 
             {/* 問題列表 */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -298,7 +378,25 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredIssues.filter(i => i.status !== '已解決').map(issue => (
-                                <IssueRow key={issue.id} issue={issue} onEdit={i => { setCurrentIssue(i); setIsEditing(true); }} onDelete={handleDelete} canEdit={canAccessAll || issue.createdByEmail === user?.email} />
+                                <IssueRow
+                                    key={issue.id}
+                                    issue={issue}
+                                    onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
+                                    onDelete={handleDelete}
+                                    canEdit={canAccessAll || issue.createdByEmail === user?.email}
+                                    db={db}
+                                    user={user}
+                                    userDirectoryMap={userDirectoryMap}
+                                    focusTarget={focusTarget}
+                                    onFocusHandled={onFocusHandled}
+                                    demoMode={demoMode}
+                                    onDemoStateChange={onDemoStateChange}
+                                    unreadCommentCount={unreadCommentCountMap[buildNotificationTargetKey({
+                                        targetType: 'issue',
+                                        targetId: issue.id,
+                                        targetPath: issue.path,
+                                    })] || 0}
+                                />
                             ))}
                             {filteredIssues.filter(i => i.status !== '已解決').length === 0 && (
                                 <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-400"><AlertCircle size={32} className="mx-auto mb-2 opacity-30" />沒有符合條件的問題</td></tr>
@@ -326,7 +424,25 @@ const IssueManager = ({ db, user, canAccessAll, isAdmin, teams = [], geminiApiKe
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {filteredIssues.filter(i => i.status === '已解決').map(issue => (
-                                        <IssueRow key={issue.id} issue={issue} onEdit={i => { setCurrentIssue(i); setIsEditing(true); }} onDelete={handleDelete} canEdit={canAccessAll || issue.createdByEmail === user?.email} />
+                                        <IssueRow
+                                            key={issue.id}
+                                            issue={issue}
+                                            onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
+                                            onDelete={handleDelete}
+                                            canEdit={canAccessAll || issue.createdByEmail === user?.email}
+                                            db={db}
+                                            user={user}
+                                            userDirectoryMap={userDirectoryMap}
+                                            focusTarget={focusTarget}
+                                            onFocusHandled={onFocusHandled}
+                                            demoMode={demoMode}
+                                            onDemoStateChange={onDemoStateChange}
+                                            unreadCommentCount={unreadCommentCountMap[buildNotificationTargetKey({
+                                                targetType: 'issue',
+                                                targetId: issue.id,
+                                                targetPath: issue.path,
+                                            })] || 0}
+                                        />
                                     ))}
                                 </tbody>
                             </table>

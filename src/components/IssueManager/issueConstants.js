@@ -7,7 +7,7 @@ export const priorityConfig = {
 };
 
 export const issueStatusConfig = {
-    '處理中': { color: 'bg-blue-100 text-blue-700', icon: '🔵' },
-    '待驗證': { color: 'bg-yellow-100 text-yellow-700', icon: '🟡' },
-    '已解決': { color: 'bg-green-100 text-green-700', icon: '🟢' },
+    '處理中': { color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    '待驗證': { color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+    '已解決': { color: 'bg-green-100 text-green-700 border-green-200' },
 };

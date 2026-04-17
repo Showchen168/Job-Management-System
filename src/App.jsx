@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import * as OpenCC from 'opencc-js';
 import {
     CheckCircle2, AlertCircle, Users, Settings, Database,
     LogOut, Loader2, ShieldCheck, ShieldAlert, Menu, X, Clock,
-    LayoutDashboard
+    LayoutDashboard, PanelsTopLeft, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
 import { DEFAULT_CONFIG, ROOT_ADMINS, SYSTEM_CREATOR, APP_VERSION, LOCALE_STORAGE_KEY, DEFAULT_LOCALE } from './constants';
@@ -22,8 +22,19 @@ import TaskManager from './components/TaskManager/TaskManager';
 import MeetingMinutes from './components/MeetingMinutes/MeetingMinutes';
 import IssueManager from './components/IssueManager/IssueManager';
 import SettingsPage from './components/SettingsPage';
+import NotificationBell from './components/Notifications/NotificationBell';
+import TeamBoard from './components/TeamBoard/TeamBoard';
+import { buildUnreadCommentCountMap } from './utils/notifications-center';
+import {
+    getDemoUser,
+    getNotificationsForUser,
+    loadDemoState,
+    markDemoNotificationRead,
+    saveDemoState,
+} from './mock/demo-store';
 
 const App = () => {
+    const SIDEBAR_COLLAPSED_KEY = 'jms-sidebar-collapsed';
     const [activeTab, setActiveTab] = useState('dashboard');
     const [appInstance, setAppInstance] = useState(null);
     const [db, setDb] = useState(null);
@@ -41,6 +52,13 @@ const App = () => {
     const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
+    const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    });
+    const [notifications, setNotifications] = useState([]);
+    const [focusTarget, setFocusTarget] = useState(null);
+    const [demoState, setDemoState] = useState(null);
     const localeConvertersRef = useRef(null);
     const originalLocaleTextRef = useRef(new WeakMap());
     const isLocaleUpdatingRef = useRef(false);
@@ -51,7 +69,9 @@ const App = () => {
         return {
             enabled: params.get('testMode') === '1',
             userEmail: params.get('testUserEmail'),
-            forceAuthPage: params.get('testAuth') === '1'
+            forceAuthPage: params.get('testAuth') === '1',
+            demo: params.get('demo') === '1',
+            resetDemo: params.get('resetDemo') === '1',
         };
     }, []);
 
@@ -64,7 +84,14 @@ const App = () => {
                 setIsAuthChecking(false);
                 return;
             }
-            setUser({ uid: 'test-mode', email: testConfig.userEmail || null });
+            if (testConfig.demo) {
+                const nextDemoState = loadDemoState({ reset: testConfig.resetDemo });
+                setDemoState(nextDemoState);
+                const nextUser = getDemoUser(nextDemoState, testConfig.userEmail || 'showchen@aivres.com');
+                setUser(nextUser);
+            } else {
+                setUser({ uid: 'test-mode', email: testConfig.userEmail || null });
+            }
             setConnectionStatus('測試模式');
             setIsAuthChecking(false);
             return;
@@ -97,7 +124,7 @@ const App = () => {
             }
         };
         initFirebase();
-    }, [testConfig.enabled, testConfig.userEmail]);
+    }, [testConfig.enabled, testConfig.userEmail, testConfig.demo, testConfig.resetDemo]);
 
     // OpenCC converter initialization
     useEffect(() => {
@@ -224,6 +251,37 @@ const App = () => {
         registerUser();
     }, [db, user, testConfig.enabled]);
 
+    useEffect(() => {
+        if (!testConfig.enabled || !testConfig.demo || !demoState || !user?.email) return;
+        setTeams(demoState.teams || []);
+        setNotifications(getNotificationsForUser(demoState, user.email));
+    }, [testConfig.enabled, testConfig.demo, demoState, user?.email]);
+
+    // Notifications subscription
+    useEffect(() => {
+        if (!db || !user?.uid || testConfig.enabled) {
+            if (!testConfig.demo) setNotifications([]);
+            return undefined;
+        }
+
+        const notificationsQuery = query(
+            collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users', user.uid, 'notifications'),
+            orderBy('createdAt', 'desc')
+        );
+
+        return onSnapshot(
+            notificationsQuery,
+            (snapshot) => {
+                setNotifications(snapshot.docs.map((docSnap) => ({
+                    id: docSnap.id,
+                    path: docSnap.ref.path,
+                    ...docSnap.data(),
+                })));
+            },
+            (err) => logger.error('Notifications error:', err)
+        );
+    }, [db, user?.uid, testConfig.enabled]);
+
     // Close mobile menu on tab change
     useEffect(() => { setIsMobileMenuOpen(false); }, [activeTab]);
 
@@ -234,6 +292,11 @@ const App = () => {
         handleResize();
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isDesktopSidebarCollapsed ? '1' : '0');
+    }, [isDesktopSidebarCollapsed]);
 
     // Body overflow for mobile menu
     useEffect(() => {
@@ -247,13 +310,28 @@ const App = () => {
     const isUserLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
     const isUserPrivileged = isUserAdmin || isUserEditor;
     const canAccessSettings = isUserAdmin || isUserEditor || isUserLeader;
+    const canAccessTeamBoard = isUserAdmin || isUserEditor || isUserLeader;
     const userDisplayName = useMemo(() => formatEmailPrefix(user?.email), [user]);
+    const currentPageTitle = useMemo(() => {
+        if (activeTab === 'dashboard') return '數據看板';
+        if (activeTab === 'tasks') return '待辦事項';
+        if (activeTab === 'issues') return '問題管理';
+        if (activeTab === 'meetings') return '會議記錄';
+        if (activeTab === 'team-board') return '團隊看板';
+        if (activeTab === 'settings') return '系統設定';
+        return '工作紀錄中心';
+    }, [activeTab]);
     const connectionIndicatorClass = useMemo(() => {
         if (connectionStatus.includes('已連線')) return 'bg-emerald-400';
         if (connectionStatus.includes('離線')) return 'bg-red-400';
         if (connectionStatus.includes('測試模式')) return 'bg-amber-400';
         return 'bg-slate-400';
     }, [connectionStatus]);
+    const unreadCommentCountMap = useMemo(
+        () => buildUnreadCommentCountMap(notifications),
+        [notifications]
+    );
+    const isSidebarCollapsed = !isMobileViewport && isDesktopSidebarCollapsed;
 
     const handleSaveGeminiSettings = async (key, model) => {
         if (testConfig.enabled || !db) {
@@ -271,6 +349,41 @@ const App = () => {
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         setIsMobileMenuOpen(false);
+    };
+
+    const handleDemoStateChange = (updater) => {
+        setDemoState((current) => {
+            const nextState = typeof updater === 'function' ? updater(current) : updater;
+            saveDemoState(nextState);
+            return nextState;
+        });
+    };
+
+    const handleOpenNotificationTarget = (notification) => {
+        const nextTab = notification?.targetType === 'issue' ? 'issues' : 'tasks';
+        setActiveTab(nextTab);
+        setFocusTarget({
+            targetId: notification?.targetId || '',
+            targetPath: notification?.targetPath || '',
+            targetType: notification?.targetType || 'task',
+            highlightedAt: Date.now(),
+        });
+    };
+
+    const handleMarkNotificationAsRead = async (notification) => {
+        if (testConfig.demo) {
+            handleDemoStateChange((current) => markDemoNotificationRead(current, {
+                userEmail: user?.email,
+                notificationId: notification.id,
+            }));
+            return;
+        }
+        if (!db || !notification?.path || notification.read) return;
+        await updateDoc(doc(db, notification.path), {
+            read: true,
+            readAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+        });
     };
 
     if (isAuthChecking) {
@@ -322,7 +435,8 @@ const App = () => {
                 <button type="button" aria-label="關閉選單" className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px] md:hidden" onClick={() => setIsMobileMenuOpen(false)} data-testid="mobile-sidebar-overlay" />
             )}
             <aside
-                className="fixed inset-y-0 left-0 z-50 w-[min(86vw,20rem)] border-r border-black/10 bg-[#fbfaf8] transition-transform duration-200 md:static md:min-h-screen md:w-72 md:border-b-0"
+                data-testid="desktop-sidebar"
+                className={`fixed inset-y-0 left-0 z-50 w-[min(86vw,20rem)] border-r border-black/10 bg-[#fbfaf8] transition-all duration-200 md:static md:min-h-screen md:border-b-0 ${isSidebarCollapsed ? 'md:w-24' : 'md:w-72'}`}
                 style={{
                     left: isMobileViewport && !isMobileMenuOpen ? 'calc(min(86vw, 20rem) * -1 - 1px)' : undefined,
                     transform: isMobileViewport ? 'translateX(0)' : undefined
@@ -338,79 +452,131 @@ const App = () => {
                         </button>
                     </div>
                     <div className="p-6">
-                        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-[-0.04em] text-slate-900">
-                            <Database className="text-[#0075de]" /> 工作紀錄中心
-                            <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
-                        </h1>
-                        <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm" data-testid="firebase-status">
+                        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3`}>
+                            <h1 className={`flex items-center text-2xl font-bold tracking-[-0.04em] text-slate-900 ${isSidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
+                                <Database className="text-[#0075de]" />
+                                {!isSidebarCollapsed && (
+                                    <>
+                                        <span>工作紀錄中心</span>
+                                        <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
+                                    </>
+                                )}
+                            </h1>
+                            {!isMobileViewport && (
+                                <button
+                                    type="button"
+                                    aria-label={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
+                                    title={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
+                                    className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                                    onClick={() => setIsDesktopSidebarCollapsed((current) => !current)}
+                                    data-testid="desktop-sidebar-toggle"
+                                >
+                                    {isDesktopSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                                </button>
+                            )}
+                        </div>
+                        <div className={`mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm ${isSidebarCollapsed ? 'justify-center px-2' : ''}`} data-testid="firebase-status">
                             <span className={`inline-block h-2 w-2 rounded-full ${connectionIndicatorClass}`} />
-                            <span>Firebase 連線狀態：{connectionStatus}</span>
+                            {!isSidebarCollapsed && <span>Firebase 連線狀態：{connectionStatus}</span>}
                         </div>
                     </div>
-                    <nav className="flex-1 space-y-2 px-4 pb-4" aria-label="主要導覽">
-                        <NavButton active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" />
-                        <NavButton active={activeTab === 'tasks'} onClick={() => handleTabChange('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" />
-                        <NavButton active={activeTab === 'issues'} onClick={() => handleTabChange('issues')} icon={<AlertCircle size={20} />} label="問題管理" />
-                        <NavButton active={activeTab === 'meetings'} onClick={() => handleTabChange('meetings')} icon={<Users size={20} />} label="會議記錄" />
+                    <nav className={`flex-1 space-y-2 pb-4 ${isSidebarCollapsed ? 'px-3' : 'px-4'}`} aria-label="主要導覽">
+                        <NavButton active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" collapsed={isSidebarCollapsed} />
+                        {canAccessTeamBoard && <NavButton active={activeTab === 'team-board'} onClick={() => handleTabChange('team-board')} icon={<PanelsTopLeft size={20} />} label="團隊看板" collapsed={isSidebarCollapsed} />}
+                        <NavButton active={activeTab === 'tasks'} onClick={() => handleTabChange('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" collapsed={isSidebarCollapsed} />
+                        <NavButton active={activeTab === 'issues'} onClick={() => handleTabChange('issues')} icon={<AlertCircle size={20} />} label="問題管理" collapsed={isSidebarCollapsed} />
+                        <NavButton active={activeTab === 'meetings'} onClick={() => handleTabChange('meetings')} icon={<Users size={20} />} label="會議記錄" collapsed={isSidebarCollapsed} />
                     </nav>
-                    <div className="mx-4 mb-4 rounded-[24px] border border-black/10 bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.04)]">
-                        <div className="flex items-center gap-3 mb-4">
+                    <div className={`mb-4 rounded-[24px] border border-black/10 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.04)] ${isSidebarCollapsed ? 'mx-3 p-3' : 'mx-4 p-4'}`}>
+                        <div className={`mb-4 flex ${isSidebarCollapsed ? 'justify-center' : 'items-center gap-3'}`}>
                             <div className="w-10 h-10 rounded-full bg-[#eef6ff] text-[#0075de] flex items-center justify-center text-xs font-bold flex-shrink-0">
                                 {userDisplayName ? userDisplayName.charAt(0).toUpperCase() : 'U'}
                             </div>
-                            <div className="overflow-hidden flex-1">
-                                <div className="text-sm font-bold truncate text-slate-900" data-testid="user-display-name">{userDisplayName}</div>
-                                <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                    {isUserAdmin ? <span className="text-yellow-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
-                                     : isUserEditor ? <span className="text-blue-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
-                                     : isUserLeader ? <span className="text-teal-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
-                                     : 'User'}
+                            {!isSidebarCollapsed && (
+                                <div className="overflow-hidden flex-1">
+                                    <div className="text-sm font-bold truncate text-slate-900" data-testid="user-display-name">{userDisplayName}</div>
+                                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                                        {isUserAdmin ? <span className="text-yellow-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
+                                         : isUserEditor ? <span className="text-blue-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
+                                         : isUserLeader ? <span className="text-teal-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
+                                         : 'User'}
+                                    </div>
                                 </div>
-                            </div>
-                            {canAccessSettings && (
+                            )}
+                            {canAccessSettings && !isSidebarCollapsed && (
                                 <button onClick={() => setActiveTab('settings')} className={`p-2 rounded-xl transition flex-shrink-0 ${activeTab === 'settings' ? 'bg-[#0075de] text-white' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`} title="系統設定">
                                     <Settings size={16} />
                                 </button>
                             )}
                         </div>
-                        {!testConfig.enabled && auth && (
+                        {!testConfig.enabled && auth && !isSidebarCollapsed && (
                             <button onClick={() => signOut(auth)} className="w-full text-xs flex items-center justify-center gap-2 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-600 transition">
                                 <LogOut size={14} /> 登出
                             </button>
                         )}
-                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/10 text-[11px] text-slate-400" data-testid="locale-toggle">
-                            <span>語系</span>
-                            <button onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))} className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition" data-testid="locale-toggle-button">
-                                {locale === 'zh-Hant' ? '简体' : '繁體'}
-                            </button>
-                        </div>
+                        {!isSidebarCollapsed ? (
+                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/10 text-[11px] text-slate-400" data-testid="locale-toggle">
+                                <span>語系</span>
+                                <button onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))} className="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition" data-testid="locale-toggle-button">
+                                    {locale === 'zh-Hant' ? '简体' : '繁體'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex justify-center pt-1">
+                                <button onClick={() => setLocale((prev) => (prev === 'zh-Hant' ? 'zh-Hans' : 'zh-Hant'))} className="rounded-xl bg-slate-100 px-2.5 py-1.5 text-[11px] text-slate-600 transition hover:bg-slate-200" data-testid="locale-toggle-button" title="切換語系">
+                                    {locale === 'zh-Hant' ? '简体' : '繁體'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </aside>
 
             <main className="flex-1 overflow-y-auto md:h-screen" data-testid="workspace-shell">
-                <div className="sticky top-0 z-30 flex items-center justify-between border-b border-black/10 bg-[#f6f5f4]/95 px-4 py-3 backdrop-blur md:hidden">
-                    <div className="min-w-0">
+                <div className="sticky top-0 z-30 border-b border-black/10 bg-[#f6f5f4]/95 backdrop-blur">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-8">
+                        <div className="min-w-0">
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">工作紀錄中心</div>
-                        <div className="truncate text-base font-bold text-slate-900">
-                            {activeTab === 'dashboard' && '數據看板'}
-                            {activeTab === 'tasks' && '待辦事項'}
-                            {activeTab === 'issues' && '問題管理'}
-                            {activeTab === 'meetings' && '會議記錄'}
-                            {activeTab === 'settings' && '系統設定'}
+                            <div className="truncate text-base font-bold text-slate-900">{currentPageTitle}</div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <NotificationBell
+                                notifications={notifications}
+                                onOpenTarget={handleOpenNotificationTarget}
+                                onMarkAsRead={handleMarkNotificationAsRead}
+                            />
+                            <button type="button" aria-label="開啟選單" className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-sm md:hidden" onClick={() => setIsMobileMenuOpen(true)} data-testid="mobile-menu-button">
+                                <Menu size={18} />
+                            </button>
                         </div>
                     </div>
-                    <button type="button" aria-label="開啟選單" className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-sm" onClick={() => setIsMobileMenuOpen(true)} data-testid="mobile-menu-button">
-                        <Menu size={18} />
-                    </button>
                 </div>
                 <div className="mx-auto max-w-7xl p-4 md:p-8">
                     {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                     {activeTab === 'tasks' && (
-                        <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} teams={teams} />
+                        <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} />
                     )}
-                    {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} isRootAdmin={isUserAdmin} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} teams={teams} />}
-                    {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} geminiApiKey={geminiApiKey} geminiModel={geminiModel} canUseAI={isUserCanUseAI} />}
+                    {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} teams={teams} />}
+                    {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} />}
+                    {activeTab === 'team-board' && canAccessTeamBoard && (
+                        <TeamBoard
+                            db={db}
+                            user={user}
+                            teams={teams}
+                            canAccessAll={isUserPrivileged}
+                            demoMode={testConfig.demo}
+                            demoState={demoState}
+                            onOpenItem={(item) => {
+                                setActiveTab(item.type === 'issue' ? 'issues' : 'tasks');
+                                setFocusTarget({
+                                    targetId: item.id,
+                                    targetPath: item.path,
+                                    targetType: item.type,
+                                    highlightedAt: Date.now(),
+                                });
+                            }}
+                        />
+                    )}
                     {activeTab === 'settings' && (
                         canAccessSettings ? (
                             <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} />

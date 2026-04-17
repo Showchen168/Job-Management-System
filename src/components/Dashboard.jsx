@@ -3,10 +3,10 @@ import {
     collection, collectionGroup, query, onSnapshot
 } from 'firebase/firestore';
 import {
-    AlertCircle, Users, LayoutDashboard, BarChart3, PieChart, Briefcase
+    AlertCircle, Users, BarChart3, PieChart, Briefcase
 } from 'lucide-react';
 
-const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
+const Dashboard = ({ db, user, canAccessAll }) => {
     const [taskStats, setTaskStats] = useState({ total: 0, byStatus: {}, bySource: {}, byAssignee: {}, byAssigneeStatus: {}, statusOrder: [] });
     const [meetingStats, setMeetingStats] = useState({ total: 0, byCategory: {} });
     const [issueStats, setIssueStats] = useState({ total: 0, open: 0, overdue: 0, resolved: 0, byStatus: {}, byClient: {} });
@@ -68,7 +68,6 @@ const Dashboard = ({ db, user, canAccessAll, isAdmin }) => {
 
     return (
         <div className="space-y-6 animate-in fade-in">
-            <div className="flex items-center gap-2"><h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-[#0075de]"/> 數據看板</h2>{canAccessAll && <span className={`text-xs px-2 py-1 rounded-full font-bold ${isAdmin ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{isAdmin ? 'Admin View (All Data)' : 'Editor View (All Data)'}</span>}</div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <div className="rounded-[24px] border border-black/10 bg-white p-6 shadow-[0_16px_40px_rgba(0,0,0,0.04)]"><div className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">總待辦事項</div><div className="text-4xl font-bold tracking-[-0.04em] text-slate-800">{taskStats.total}</div></div>
                 {Object.entries(taskStats.byStatus).slice(0, 3).map(([status, count], i) => {
