@@ -674,7 +674,7 @@ const App = () => {
                         </div>
                     </div>
                 </div>
-                <div className="mx-auto max-w-7xl p-4 md:p-8">
+                <div className="mx-auto max-w-7xl px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0" data-testid="workspace-content-shell">
                     {activeTab === 'dashboard' && canAccessDashboard && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                     {activeTab === 'tasks' && (
                         <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} permissionContext={permissionContext} />

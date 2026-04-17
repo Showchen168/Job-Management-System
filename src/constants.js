@@ -1,5 +1,5 @@
 export const SYSTEM_CREATOR = "Show";
-export const APP_VERSION = "v1.1.0";
+export const APP_VERSION = "v1.5.0";
 export const ON_GOING_KEYWORDS = ["on-going", "ongoing", "進行"];
 export const LOCALE_STORAGE_KEY = "jms-locale";
 export const DEFAULT_LOCALE = "zh-Hant";

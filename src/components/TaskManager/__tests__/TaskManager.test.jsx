@@ -47,6 +47,7 @@ describe('TaskManager', () => {
         expect(screen.queryByRole('button', { name: /AI 總結/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /新增/i })).toBeInTheDocument();
         expect(screen.getByTestId('task-toolbar')).toBeInTheDocument();
+        expect(screen.getByTestId('task-toolbar-shell')).toHaveClass('sticky');
     });
 
     it('disables create action when role permission denies it', () => {

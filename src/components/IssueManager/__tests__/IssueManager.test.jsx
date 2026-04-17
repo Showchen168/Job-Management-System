@@ -46,6 +46,7 @@ describe('IssueManager', () => {
         expect(screen.queryByRole('button', { name: /AI 總結/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /新增問題/i })).toBeInTheDocument();
         expect(screen.getByTestId('issue-toolbar')).toBeInTheDocument();
+        expect(screen.getByTestId('issue-toolbar-shell')).toHaveClass('sticky');
         expect(screen.queryByText('全部問題')).not.toBeInTheDocument();
         expect(screen.queryByText('未解決')).not.toBeInTheDocument();
         expect(screen.queryByText('已逾期')).not.toBeInTheDocument();

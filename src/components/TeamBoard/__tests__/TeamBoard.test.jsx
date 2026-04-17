@@ -66,6 +66,7 @@ describe('TeamBoard', () => {
 
         expect(screen.queryByText(/切換團隊後/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/目前共/i)).not.toBeInTheDocument();
+        expect(screen.getByTestId('team-board-toolbar-shell')).toHaveClass('sticky');
         expect(screen.getByTestId('team-board-toolbar')).toBeInTheDocument();
         expect(screen.getByDisplayValue('研發一組')).toBeInTheDocument();
         expect(screen.getByDisplayValue('全部類型')).toBeInTheDocument();

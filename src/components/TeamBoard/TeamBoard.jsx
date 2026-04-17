@@ -17,6 +17,7 @@ import logger from '../../utils/logger';
 import TeamBoardItemDialog from './TeamBoardItemDialog';
 import CollapsibleDoneSection from '../common/CollapsibleDoneSection';
 import {
+    StickyToolbarShell,
     StandardToolbar,
     StandardToolbarField,
     StandardToolbarSelect,
@@ -235,36 +236,39 @@ const TeamBoard = ({
     );
 
     return (
-        <div className="space-y-6 animate-in fade-in">
-            <div className="flex flex-col gap-3">
-                <StandardToolbar testId="team-board-toolbar">
-                    <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect className="sm:w-32" value={selectedTeamId} onChange={(event) => setSelectedTeamId(event.target.value)}>
-                            {filterableTeams.map((team) => (
-                                <option key={team.id} value={team.id}>{team.name}</option>
-                            ))}
-                        </StandardToolbarSelect>
-                    </StandardToolbarField>
+        <div className="animate-in fade-in">
+            <StickyToolbarShell testId="team-board-toolbar-shell">
+                <div className="flex flex-col gap-3">
+                    <StandardToolbar testId="team-board-toolbar">
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect className="sm:w-32" value={selectedTeamId} onChange={(event) => setSelectedTeamId(event.target.value)}>
+                                {filterableTeams.map((team) => (
+                                    <option key={team.id} value={team.id}>{team.name}</option>
+                                ))}
+                            </StandardToolbarSelect>
+                        </StandardToolbarField>
 
-                    <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect className="sm:w-28" value={selectedType} onChange={(event) => setSelectedType(event.target.value)}>
-                            <option value="All">全部類型</option>
-                            <option value="task">任務</option>
-                            <option value="issue">問題</option>
-                        </StandardToolbarSelect>
-                    </StandardToolbarField>
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect className="sm:w-28" value={selectedType} onChange={(event) => setSelectedType(event.target.value)}>
+                                <option value="All">全部類型</option>
+                                <option value="task">任務</option>
+                                <option value="issue">問題</option>
+                            </StandardToolbarSelect>
+                        </StandardToolbarField>
 
-                    <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect className="sm:w-28" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)}>
-                            <option value="All">全部狀態</option>
-                            {statusOptions.map((status) => (
-                                <option key={status} value={status}>{status}</option>
-                            ))}
-                        </StandardToolbarSelect>
-                    </StandardToolbarField>
-                </StandardToolbar>
-            </div>
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect className="sm:w-28" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)}>
+                                <option value="All">全部狀態</option>
+                                {statusOptions.map((status) => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))}
+                            </StandardToolbarSelect>
+                        </StandardToolbarField>
+                    </StandardToolbar>
+                </div>
+            </StickyToolbarShell>
 
+            <div className="mt-6 space-y-6">
             {columns.length === 0 ? (
                 <div className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-400">
                     目前沒有可顯示的團隊卡片
@@ -283,6 +287,7 @@ const TeamBoard = ({
                 onClose={() => setSelectedItem(null)}
                 onNavigateToItem={onOpenItem}
             />
+            </div>
         </div>
     );
 };

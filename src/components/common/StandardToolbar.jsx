@@ -1,5 +1,14 @@
 import React from 'react';
 
+export const StickyToolbarShell = ({ children, testId = 'sticky-toolbar-shell', className = '' }) => (
+    <div
+        data-testid={testId}
+        className={`sticky top-[69px] z-20 ${className}`}
+    >
+        {children}
+    </div>
+);
+
 export const StandardToolbar = ({ children, actions = null, testId = 'standard-toolbar' }) => (
     <div
         data-testid={testId}

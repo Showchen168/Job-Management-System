@@ -10,6 +10,7 @@ import TaskRow from './TaskRow';
 import Modal from '../common/Modal';
 import CollapsibleDoneSection from '../common/CollapsibleDoneSection';
 import {
+    StickyToolbarShell,
     StandardToolbar,
     StandardToolbarButton,
     StandardToolbarField,
@@ -325,60 +326,63 @@ const TaskManager = ({
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in">
+        <div className="animate-in fade-in">
         <Modal {...modalConfig} />
-        <div className="flex flex-col gap-3">
-            <StandardToolbar
-                testId="task-toolbar"
-                actions={(
-                    <>
-                        {!isRegularMember && (
-                            <StandardToolbarButton
-                                type="button"
-                                onClick={() => setShowFilters(f => !f)}
-                                className={showFilters ? 'bg-slate-50 text-slate-700' : ''}
-                            >
-                                <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+        <StickyToolbarShell testId="task-toolbar-shell">
+            <div className="flex flex-col gap-3">
+                <StandardToolbar
+                    testId="task-toolbar"
+                    actions={(
+                        <>
+                            {!isRegularMember && (
+                                <StandardToolbarButton
+                                    type="button"
+                                    onClick={() => setShowFilters(f => !f)}
+                                    className={showFilters ? 'bg-slate-50 text-slate-700' : ''}
+                                >
+                                    <Filter size={14} /> 進階篩選 <ChevronRight size={14} className={`transition-transform ${showFilters ? 'rotate-90' : ''}`} />
+                                </StandardToolbarButton>
+                            )}
+                            <StandardToolbarButton type="button" onClick={handleExport}>
+                                <Download size={16} /> 匯出
                             </StandardToolbarButton>
-                        )}
-                        <StandardToolbarButton type="button" onClick={handleExport}>
-                            <Download size={16} /> 匯出
-                        </StandardToolbarButton>
-                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentTask(null); setIsEditing(true); }} disabled={!canCreateTask}>
-                            <Plus size={16} /> 新增
-                        </StandardToolbarButton>
-                    </>
-                )}
-            >
-                <StandardToolbarField icon={<Search size={16} />}>
-                    <StandardToolbarInput
-                        placeholder="搜尋..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="sm:w-40"
-                    />
-                </StandardToolbarField>
-                <StandardToolbarField icon={<Filter size={16} />}>
-                    <StandardToolbarSelect value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="sm:w-28">
-                        <option value="All">全部狀態</option>
-                        {taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                    </StandardToolbarSelect>
-                </StandardToolbarField>
-            </StandardToolbar>
-            {!isRegularMember && showFilters && (
-                <StandardToolbar testId="task-advanced-toolbar">
-                    <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="sm:w-28"><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</StandardToolbarSelect>
+                            <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentTask(null); setIsEditing(true); }} disabled={!canCreateTask}>
+                                <Plus size={16} /> 新增
+                            </StandardToolbarButton>
+                        </>
+                    )}
+                >
+                    <StandardToolbarField icon={<Search size={16} />}>
+                        <StandardToolbarInput
+                            placeholder="搜尋..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="sm:w-40"
+                        />
                     </StandardToolbarField>
                     <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="sm:w-32"><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</StandardToolbarSelect>
-                    </StandardToolbarField>
-                    <StandardToolbarField icon={<Filter size={16} />}>
-                        <StandardToolbarSelect value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} className="sm:w-32"><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</StandardToolbarSelect>
+                        <StandardToolbarSelect value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="sm:w-28">
+                            <option value="All">全部狀態</option>
+                            {taskStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </StandardToolbarSelect>
                     </StandardToolbarField>
                 </StandardToolbar>
-            )}
-        </div>
+                {!isRegularMember && showFilters && (
+                    <StandardToolbar testId="task-advanced-toolbar">
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="sm:w-28"><option value="All">全部來源</option>{taskSources.map(s => <option key={s} value={s}>{s}</option>)}</StandardToolbarSelect>
+                        </StandardToolbarField>
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="sm:w-32"><option value="All">全部負責人</option>{filterableAssignees.map(a => <option key={a} value={a}>{a}</option>)}</StandardToolbarSelect>
+                        </StandardToolbarField>
+                        <StandardToolbarField icon={<Filter size={16} />}>
+                            <StandardToolbarSelect value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} className="sm:w-32"><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</StandardToolbarSelect>
+                        </StandardToolbarField>
+                    </StandardToolbar>
+                )}
+            </div>
+        </StickyToolbarShell>
+        <div className="mt-6 space-y-6">
         {isEditing && (
             <TaskForm
                 initialData={currentTask}
@@ -464,6 +468,7 @@ const TaskManager = ({
                 </div>
             </CollapsibleDoneSection>
         )}
+        </div>
         </div>
     );
 };

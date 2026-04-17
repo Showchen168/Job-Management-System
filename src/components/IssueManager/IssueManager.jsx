@@ -11,6 +11,7 @@ import { ISSUE_STATUSES } from './issueConstants';
 import Modal from '../common/Modal';
 import CollapsibleDoneSection from '../common/CollapsibleDoneSection';
 import {
+    StickyToolbarShell,
     StandardToolbar,
     StandardToolbarButton,
     StandardToolbarField,
@@ -315,9 +316,41 @@ const IssueManager = ({
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in">
+        <div className="animate-in fade-in">
             <Modal {...modalConfig} />
 
+            <StickyToolbarShell testId="issue-toolbar-shell">
+                <StandardToolbar
+                    testId="issue-toolbar"
+                    actions={(
+                        <>
+                            <StandardToolbarButton type="button" onClick={handleExport}>
+                                <Download size={16} /> 匯出
+                            </StandardToolbarButton>
+                            <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentIssue(null); setIsEditing(true); }} disabled={!canCreateIssue}>
+                                <Plus size={16} /> 新增問題
+                            </StandardToolbarButton>
+                        </>
+                    )}
+                >
+                    <StandardToolbarField icon={<Search size={16} />}>
+                        <StandardToolbarInput
+                            placeholder="搜尋..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="sm:w-40"
+                        />
+                    </StandardToolbarField>
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="sm:w-28">
+                            <option value="All">全部狀態</option>
+                            {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </StandardToolbarSelect>
+                    </StandardToolbarField>
+                </StandardToolbar>
+            </StickyToolbarShell>
+
+            <div className="mt-6 space-y-6">
             {/* 新增/編輯 Modal */}
             {isEditing && (
                 <IssueForm
@@ -331,35 +364,6 @@ const IssueManager = ({
                     issueEscalations={issueEscalations}
                 />
             )}
-
-            <StandardToolbar
-                testId="issue-toolbar"
-                actions={(
-                    <>
-                        <StandardToolbarButton type="button" onClick={handleExport}>
-                            <Download size={16} /> 匯出
-                        </StandardToolbarButton>
-                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentIssue(null); setIsEditing(true); }} disabled={!canCreateIssue}>
-                            <Plus size={16} /> 新增問題
-                        </StandardToolbarButton>
-                    </>
-                )}
-            >
-                <StandardToolbarField icon={<Search size={16} />}>
-                    <StandardToolbarInput
-                        placeholder="搜尋..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="sm:w-40"
-                    />
-                </StandardToolbarField>
-                <StandardToolbarField icon={<Filter size={16} />}>
-                    <StandardToolbarSelect value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="sm:w-28">
-                        <option value="All">全部狀態</option>
-                        {ISSUE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </StandardToolbarSelect>
-                </StandardToolbarField>
-            </StandardToolbar>
 
             {/* 問題列表 */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -456,6 +460,7 @@ const IssueManager = ({
                     </div>
                 </CollapsibleDoneSection>
             )}
+            </div>
         </div>
     );
 };

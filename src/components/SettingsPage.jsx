@@ -143,6 +143,15 @@ const SettingsPage = ({
             })),
         [resolvedRoleDefinitions]
     );
+    const savedUserRoles = useMemo(
+        () => Object.fromEntries(
+            Object.entries(userRoles || {}).map(([email, roleKey]) => [
+                normalizePermissionEmail(email),
+                roleKey,
+            ])
+        ),
+        [userRoles]
+    );
     const settingsTabs = useMemo(() => {
         const nextTabs = [];
         if (isAdmin || isEditor) {
@@ -183,13 +192,31 @@ const SettingsPage = ({
         return resolvedRoleDefinitions[roleKey]?.label || resolvedRoleDefinitions.viewer?.label || '員工';
     };
 
+    const resolvePersistedRoleKey = (email) => {
+        if (!email) return 'viewer';
+        const normalizedEmail = normalizePermissionEmail(email);
+        const effectiveRoleKey = buildPermissionContext({
+            user: { email: normalizedEmail },
+            teams,
+            cloudAdmins,
+            cloudEditors,
+            cloudAIUsers,
+            userRoles: savedUserRoles,
+            roleDefinitions: resolvedRoleDefinitions,
+        }).roleKey;
+
+        return SETTINGS_ROLE_OPTION_KEYS.includes(effectiveRoleKey)
+            ? effectiveRoleKey
+            : 'viewer';
+    };
+
     const registeredUsers = useMemo(() => {
         const normalizedSearch = registeredUserSearch.trim().toLowerCase();
         const filteredUsers = allUsers.filter((entry) => {
             const email = (entry.email || '').toLowerCase();
             const prefix = formatEmailPrefix(entry.email || '').toLowerCase();
             const uid = (entry.uid || '').toLowerCase();
-            const roleKey = draftUserRoles[normalizePermissionEmail(entry.email)] || 'viewer';
+            const roleKey = resolvePersistedRoleKey(entry.email);
 
             const matchesSearch = !normalizedSearch
                 || email.includes(normalizedSearch)
@@ -215,7 +242,7 @@ const SettingsPage = ({
             }
             return getLastSeenTime(right) - getLastSeenTime(left);
         });
-    }, [allUsers, draftUserRoles, registeredUserSearch, registeredUserRoleFilter, registeredUserSort, resolvedRoleDefinitions]);
+    }, [allUsers, registeredUserSearch, registeredUserRoleFilter, registeredUserSort, teams, cloudAdmins, cloudEditors, cloudAIUsers, savedUserRoles, resolvedRoleDefinitions]);
 
     const totalRegisteredUsersPages = Math.max(1, Math.ceil(registeredUsers.length / REGISTERED_USERS_PAGE_SIZE));
     const paginatedRegisteredUsers = useMemo(() => {
@@ -978,10 +1005,10 @@ const SettingsPage = ({
     };
 
     return (
-        <div className="w-full space-y-6 pb-12" data-testid="settings-page-root">
+        <div className="w-full pb-12" data-testid="settings-page-root">
             <Modal {...modalConfig} />
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" data-testid="settings-tabs">
+            <div className="sticky top-[69px] z-20 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]" data-testid="settings-tabs">
                 <div className="flex flex-wrap gap-2">
                     {settingsTabs.map((tab) => (
                         <button
@@ -1001,7 +1028,7 @@ const SettingsPage = ({
             </div>
 
             {activeSettingsTab === 'permissions' && ((canManageRoles || canManageRolePermissions) ? (
-                    <div className="space-y-4">
+                    <div className="mt-6 space-y-4">
                         <div className="flex justify-end">
                             <button
                                 type="button"
@@ -1135,13 +1162,13 @@ const SettingsPage = ({
                     </div>
                     </div>
                 ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-400">
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-400">
                         你目前可以查看系統設定，但不能變更角色或角色權限。
                     </div>
                 ))}
 
             {activeSettingsTab === 'registered-users' && (isAdmin || isEditor) && (
-                <div className={SETTINGS_PANEL_CLASS} data-testid="registered-users">
+                <div className={`mt-6 ${SETTINGS_PANEL_CLASS}`} data-testid="registered-users">
                     <div className="border-b border-slate-100 px-8 py-6">
                         <h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2>
                         <p className="mt-1 text-sm text-slate-500">獨立查看所有登入過系統的帳號資料。</p>
@@ -1219,7 +1246,7 @@ const SettingsPage = ({
                                         const isSelf = user?.email && u.email === user.email;
                                         const isRootAdmin = rootAdmins.includes(u.email);
                                         const canDelete = isAdmin && !isSelf && !isRootAdmin;
-                                        const roleKey = draftUserRoles[normalizePermissionEmail(u.email)] || 'viewer';
+                                        const roleKey = resolvePersistedRoleKey(u.email);
                                         return (
                                             <tr key={u.uid} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3 font-medium text-slate-800" data-testid="registered-user-name">{formatEmailPrefix(u.email)}</td>
@@ -1277,7 +1304,7 @@ const SettingsPage = ({
 
             {/* Team Management Panel */}
             {activeSettingsTab === 'teams' && canViewTeamPanel && (
-                <div className={`${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-team-management">
+                <div className={`mt-6 ${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-team-management">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="rounded-full bg-[#eaf3ff] p-3"><Users className="text-[#0075de]" size={24} /></div>
                         <div>
@@ -1464,7 +1491,7 @@ const SettingsPage = ({
             )}
 
             {activeSettingsTab === 'dropdowns' && (
-            <div className={`${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-global-options">
+            <div className={`mt-6 ${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-global-options">
                 <div className="flex items-center gap-3 mb-6">
                     <div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-violet-100' : 'bg-slate-100'}`}>
                         {canEditDropdowns ? <ShieldCheck className="text-violet-700" size={24} /> : <Lock className="text-slate-500" size={24} />}

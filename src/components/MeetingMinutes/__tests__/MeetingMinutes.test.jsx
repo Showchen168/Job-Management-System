@@ -40,6 +40,7 @@ describe('MeetingMinutes', () => {
         expect(screen.queryByRole('button', { name: /AI 總結/i })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /新增/i })).toBeInTheDocument();
         expect(screen.getByTestId('meeting-toolbar')).toBeInTheDocument();
+        expect(screen.getByTestId('meeting-toolbar-shell')).toHaveClass('sticky');
     });
 
     it('disables create meeting action when role permission denies it', () => {

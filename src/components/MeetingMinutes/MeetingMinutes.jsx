@@ -9,6 +9,7 @@ import MeetingForm from './MeetingForm';
 import MeetingRow from './MeetingRow';
 import Modal from '../common/Modal';
 import {
+    StickyToolbarShell,
     StandardToolbar,
     StandardToolbarButton,
     StandardToolbarField,
@@ -82,30 +83,33 @@ const MeetingMinutes = ({ db, user, canAccessAll, teams = [], permissionContext 
     const handleExport = () => { /* ... */ };
 
     return (
-        <div className="space-y-6 animate-in fade-in">
+        <div className="animate-in fade-in">
         <Modal {...modalConfig} />
-        <StandardToolbar
-            testId="meeting-toolbar"
-            actions={(
-                <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} disabled={!canCreateMeeting}>
-                    <Plus size={16} /> 新增
-                </StandardToolbarButton>
-            )}
-        >
-            <StandardToolbarField icon={<Search size={16} />}>
-                <StandardToolbarInput className="sm:w-40" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            </StandardToolbarField>
-            {!isRegularMember && (
-                <StandardToolbarField icon={<Filter size={16} />}>
-                    <StandardToolbarSelect className="sm:w-28" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</StandardToolbarSelect>
+        <StickyToolbarShell testId="meeting-toolbar-shell">
+            <StandardToolbar
+                testId="meeting-toolbar"
+                actions={(
+                    <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} disabled={!canCreateMeeting}>
+                        <Plus size={16} /> 新增
+                    </StandardToolbarButton>
+                )}
+            >
+                <StandardToolbarField icon={<Search size={16} />}>
+                    <StandardToolbarInput className="sm:w-40" placeholder="搜尋..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                 </StandardToolbarField>
-            )}
-            {!isRegularMember && (
-                <StandardToolbarField icon={<Filter size={16} />}>
-                    <StandardToolbarSelect className="sm:w-32" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</StandardToolbarSelect>
-                </StandardToolbarField>
-            )}
-        </StandardToolbar>
+                {!isRegularMember && (
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect className="sm:w-28" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}><option value="All">全部分類</option>{categories.map(c => <option key={c} value={c}>{c}</option>)}</StandardToolbarSelect>
+                    </StandardToolbarField>
+                )}
+                {!isRegularMember && (
+                    <StandardToolbarField icon={<Filter size={16} />}>
+                        <StandardToolbarSelect className="sm:w-32" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}><option value="All">全部團隊</option>{filterableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</StandardToolbarSelect>
+                    </StandardToolbarField>
+                )}
+            </StandardToolbar>
+        </StickyToolbarShell>
+        <div className="mt-6 space-y-6">
         {isEditing && (
             <MeetingForm initialData={currentMeeting} categories={categories} teams={userSelectableTeams} onSave={handleSave} onCancel={() => setIsEditing(false)} />
         )}
@@ -121,6 +125,7 @@ const MeetingMinutes = ({ db, user, canAccessAll, teams = [], permissionContext 
                 />
             ))}
             {filteredMeetings.length === 0 && <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">沒有資料</div>}
+        </div>
         </div>
         </div>
     );
