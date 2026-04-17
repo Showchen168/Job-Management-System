@@ -10,14 +10,61 @@ import {
 
 import {
     DEFAULT_MEETING_CATEGORIES, DEFAULT_TASK_SOURCES, DEFAULT_TASK_STATUSES,
-    DEFAULT_ISSUE_SOURCES, DEFAULT_ISSUE_LOCATIONS, DEFAULT_ISSUE_ESCALATIONS
+    DEFAULT_ISSUE_SOURCES, DEFAULT_ISSUE_LOCATIONS, DEFAULT_ISSUE_ESCALATIONS,
+    DEFAULT_ROLE_DEFINITIONS, PERMISSION_PAGE_KEYS,
 } from '../constants';
-import { formatEmailPrefix, normalizePermissionEmail, getTeamLeaders, checkIsLeader } from '../utils/permissions';
+import {
+    buildPermissionContext,
+    canPerformAction,
+    formatEmailPrefix,
+    getTeamLeaders,
+    normalizePermissionEmail,
+    checkIsLeader,
+    normalizeRoleDefinitions,
+    updateRoleDefinitionAccess,
+} from '../utils/permissions';
 import { buildNotificationPayloads, sendEmailJsNotification } from '../utils/notifications';
 import Modal from './common/Modal';
+import { StandardToolbarSelect } from './common/StandardToolbar';
 import logger from '../utils/logger';
 
-const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, cloudAIUsers, rootAdmins, onSaveGeminiSettings, testConfig, geminiApiKey, geminiModel, teams = [] }) => {
+const PAGE_ACCESS_LABELS = {
+    dashboard: '數據看板',
+    'team-board': '團隊看板',
+    tasks: '待辦事項',
+    issues: '問題管理',
+    meetings: '會議記錄',
+    settings: '系統設定',
+};
+
+const SETTINGS_ROLE_OPTION_KEYS = ['admin', 'leader', 'viewer'];
+const REGISTERED_USERS_PAGE_SIZE = 10;
+const SETTINGS_PANEL_CLASS = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+const SETTINGS_SUBSECTION_CLASS = 'rounded-2xl border border-slate-200 bg-slate-50 p-5';
+const SETTINGS_MAIN_SECTION_CLASS = `${SETTINGS_PANEL_CLASS} p-8`;
+const SETTINGS_SECTION_HEADER_CLASS = 'mb-6 flex min-h-[88px] items-start justify-between gap-3 border-b border-slate-100 pb-5';
+
+const SettingsPage = ({
+    db,
+    user,
+    isAdmin,
+    isEditor,
+    cloudAdmins,
+    cloudEditors,
+    cloudAIUsers,
+    rootAdmins,
+    onSaveGeminiSettings,
+    testConfig,
+    geminiApiKey,
+    geminiModel,
+    teams = [],
+    permissionContext = null,
+    roleDefinitions = DEFAULT_ROLE_DEFINITIONS,
+    userRoles = {},
+    onSaveRoleDefinitions = async () => {},
+    onSaveUserRole = async () => {},
+    demoUsers = [],
+}) => {
     const [newCategory, setNewCategory] = useState('');
     const [categories, setCategories] = useState(DEFAULT_MEETING_CATEGORIES);
     const [newTaskSource, setNewTaskSource] = useState('');
@@ -44,14 +91,25 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const [editTeamMembers, setEditTeamMembers] = useState('');
     const [modalConfig, setModalConfig] = useState({ isOpen: false });
     const isLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
-    const canEditDropdowns = isAdmin || isEditor || isLeader;
-    const canEditTaskStatuses = isAdmin || isEditor; // 待辦狀態不開放給 Leader
-    const canEditTeams = isAdmin || isEditor;
-    const canViewTeamPanel = isAdmin || isEditor || isLeader;
+    const resolvedRoleDefinitions = useMemo(
+        () => normalizeRoleDefinitions(roleDefinitions),
+        [roleDefinitions]
+    );
+    const canManageRoles = canPerformAction(permissionContext, 'settings.manageRoles');
+    const canManageRolePermissions = canPerformAction(permissionContext, 'settings.manageRolePermissions');
+    const canManageAdmins = canPerformAction(permissionContext, 'settings.manageAdmins');
+    const canManageEditors = canPerformAction(permissionContext, 'settings.manageEditors');
+    const canEditDropdowns = canPerformAction(permissionContext, 'settings.manageDropdowns') || isAdmin || isEditor || isLeader;
+    const canEditTaskStatuses = canPerformAction(permissionContext, 'settings.manageTaskStatuses') || isAdmin || isEditor;
+    const canEditTeams = canPerformAction(permissionContext, 'settings.manageTeams') || isAdmin || isEditor;
+    const canViewTeamPanel = canEditTeams || isLeader;
     const [allUsers, setAllUsers] = useState([]);
     const [isUserListLoading, setIsUserListLoading] = useState(false);
     const [userListError, setUserListError] = useState('');
-    const [isUserListExpanded, setIsUserListExpanded] = useState(false);
+    const [registeredUserSearch, setRegisteredUserSearch] = useState('');
+    const [registeredUserRoleFilter, setRegisteredUserRoleFilter] = useState('all');
+    const [registeredUserSort, setRegisteredUserSort] = useState('recent-desc');
+    const [registeredUsersPage, setRegisteredUsersPage] = useState(1);
     const [emailServiceConfig, setEmailServiceConfig] = useState({
         provider: 'emailjs',
         serviceId: '',
@@ -67,7 +125,103 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     const [isLoadingModels, setIsLoadingModels] = useState(false);
     const [isGeminiSaving, setIsGeminiSaving] = useState(false);
     const [isManualNotificationSending, setIsManualNotificationSending] = useState(false);
-    const userTableColSpan = isAdmin ? 4 : 3;
+    const [selectedRoleKey, setSelectedRoleKey] = useState('viewer');
+    const [selectedManagedUserEmail, setSelectedManagedUserEmail] = useState('');
+    const [activeSettingsTab, setActiveSettingsTab] = useState('permissions');
+    const [draftRoleDefinitions, setDraftRoleDefinitions] = useState(() => normalizeRoleDefinitions(roleDefinitions));
+    const [draftUserRoles, setDraftUserRoles] = useState(userRoles || {});
+    const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+    const userTableColSpan = isAdmin ? 5 : 4;
+    const selectedRoleDefinition = draftRoleDefinitions[selectedRoleKey] || draftRoleDefinitions.viewer;
+    const roleOptions = useMemo(
+        () => SETTINGS_ROLE_OPTION_KEYS
+            .map((roleKey) => resolvedRoleDefinitions[roleKey])
+            .filter(Boolean)
+            .map((definition) => ({
+                key: definition.key,
+                label: definition.label,
+            })),
+        [resolvedRoleDefinitions]
+    );
+    const settingsTabs = useMemo(() => {
+        const nextTabs = [];
+        if (isAdmin || isEditor) {
+            nextTabs.push({ id: 'registered-users', label: '已註冊使用者' });
+        }
+        if (canManageRoles || canManageRolePermissions || canManageAdmins || canManageEditors) {
+            nextTabs.push({ id: 'permissions', label: '角色與權限' });
+        }
+        if ((isAdmin || isEditor) || canViewTeamPanel) {
+            nextTabs.push({ id: 'teams', label: '團隊與成員' });
+        }
+        if (canEditDropdowns) {
+            nextTabs.push({ id: 'dropdowns', label: '下拉選單' });
+        }
+        return nextTabs;
+    }, [
+        canManageRoles,
+        canManageRolePermissions,
+        canManageAdmins,
+        canManageEditors,
+        isAdmin,
+        isEditor,
+        canViewTeamPanel,
+        canEditDropdowns,
+    ]);
+
+    const validUserOptions = useMemo(
+        () => allUsers.filter((entry) => entry.email && entry.email !== '(未填寫)'),
+        [allUsers]
+    );
+
+    const permissionSettingsDirty = useMemo(() => {
+        return JSON.stringify(draftRoleDefinitions) !== JSON.stringify(resolvedRoleDefinitions)
+            || JSON.stringify(draftUserRoles) !== JSON.stringify(userRoles || {});
+    }, [draftRoleDefinitions, resolvedRoleDefinitions, draftUserRoles, userRoles]);
+
+    const getRoleLabel = (roleKey) => {
+        return resolvedRoleDefinitions[roleKey]?.label || resolvedRoleDefinitions.viewer?.label || '員工';
+    };
+
+    const registeredUsers = useMemo(() => {
+        const normalizedSearch = registeredUserSearch.trim().toLowerCase();
+        const filteredUsers = allUsers.filter((entry) => {
+            const email = (entry.email || '').toLowerCase();
+            const prefix = formatEmailPrefix(entry.email || '').toLowerCase();
+            const uid = (entry.uid || '').toLowerCase();
+            const roleKey = draftUserRoles[normalizePermissionEmail(entry.email)] || 'viewer';
+
+            const matchesSearch = !normalizedSearch
+                || email.includes(normalizedSearch)
+                || prefix.includes(normalizedSearch)
+                || uid.includes(normalizedSearch);
+            const matchesRole = registeredUserRoleFilter === 'all' || roleKey === registeredUserRoleFilter;
+
+            return matchesSearch && matchesRole;
+        });
+
+        const getLastSeenTime = (entry) => {
+            if (entry.lastSeen?.toDate) return entry.lastSeen.toDate().getTime();
+            if (entry.lastSeen?.seconds) return entry.lastSeen.seconds * 1000;
+            return 0;
+        };
+
+        return [...filteredUsers].sort((left, right) => {
+            if (registeredUserSort === 'name-asc') {
+                return formatEmailPrefix(left.email || '').localeCompare(formatEmailPrefix(right.email || ''), 'zh-Hant');
+            }
+            if (registeredUserSort === 'name-desc') {
+                return formatEmailPrefix(right.email || '').localeCompare(formatEmailPrefix(left.email || ''), 'zh-Hant');
+            }
+            return getLastSeenTime(right) - getLastSeenTime(left);
+        });
+    }, [allUsers, draftUserRoles, registeredUserSearch, registeredUserRoleFilter, registeredUserSort, resolvedRoleDefinitions]);
+
+    const totalRegisteredUsersPages = Math.max(1, Math.ceil(registeredUsers.length / REGISTERED_USERS_PAGE_SIZE));
+    const paginatedRegisteredUsers = useMemo(() => {
+        const startIndex = (registeredUsersPage - 1) * REGISTERED_USERS_PAGE_SIZE;
+        return registeredUsers.slice(startIndex, startIndex + REGISTERED_USERS_PAGE_SIZE);
+    }, [registeredUsers, registeredUsersPage]);
 
     useEffect(() => {
         if (!db) {
@@ -102,7 +256,15 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     }, [db]);
 
     useEffect(() => {
-        if (!db || !canViewTeamPanel) return;
+        if (testConfig?.demo || (!db && demoUsers.length > 0)) {
+            setAllUsers((demoUsers || []).map((entry) => ({
+                ...entry,
+                docId: entry.uid || entry.email,
+            })));
+            setIsUserListLoading(false);
+            return undefined;
+        }
+        if (!db || !(canViewTeamPanel || canManageRoles || isAdmin || isEditor)) return;
         setIsUserListLoading(true);
         setUserListError('');
         const q = query(collection(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'users'), orderBy('lastSeen', 'desc'));
@@ -128,7 +290,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
             }
         );
         return () => unsubscribe();
-    }, [db, canViewTeamPanel]);
+    }, [db, canViewTeamPanel, canManageRoles, isAdmin, isEditor, demoUsers, testConfig?.demo]);
 
     useEffect(() => {
         if (!db || !isAdmin) return;
@@ -171,6 +333,43 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     useEffect(() => {
         setGeminiModelInput(geminiModel || 'gemini-2.5-flash');
     }, [geminiModel]);
+
+    useEffect(() => {
+        if (resolvedRoleDefinitions[selectedRoleKey]) return;
+        const fallbackRoleKey = Object.keys(resolvedRoleDefinitions)[0] || 'viewer';
+        setSelectedRoleKey(fallbackRoleKey);
+    }, [resolvedRoleDefinitions, selectedRoleKey]);
+
+    useEffect(() => {
+        setDraftRoleDefinitions(resolvedRoleDefinitions);
+    }, [resolvedRoleDefinitions]);
+
+    useEffect(() => {
+        setDraftUserRoles(userRoles || {});
+    }, [userRoles]);
+
+    useEffect(() => {
+        if (!validUserOptions.length) {
+            setSelectedManagedUserEmail('');
+            return;
+        }
+        if (validUserOptions.some((entry) => entry.email === selectedManagedUserEmail)) return;
+        setSelectedManagedUserEmail(validUserOptions[0]?.email || '');
+    }, [validUserOptions, selectedManagedUserEmail]);
+
+    useEffect(() => {
+        if (settingsTabs.some((tab) => tab.id === activeSettingsTab)) return;
+        setActiveSettingsTab(settingsTabs[0]?.id || 'permissions');
+    }, [settingsTabs, activeSettingsTab]);
+
+    useEffect(() => {
+        setRegisteredUsersPage(1);
+    }, [registeredUserSearch, registeredUserRoleFilter, registeredUserSort]);
+
+    useEffect(() => {
+        if (registeredUsersPage <= totalRegisteredUsersPages) return;
+        setRegisteredUsersPage(totalRegisteredUsersPages);
+    }, [registeredUsersPage, totalRegisteredUsersPages]);
 
     // 獲取可用的 Gemini 模型列表
     const fetchAvailableModels = async () => {
@@ -540,6 +739,88 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
         }
     };
 
+    const resolveDisplayedRoleKey = (email) => {
+        if (!email) return 'viewer';
+        const normalizedEmail = normalizePermissionEmail(email);
+        const assignedRoleKey = draftUserRoles?.[normalizedEmail]
+            || buildPermissionContext({
+                user: { email: normalizedEmail },
+                teams,
+                cloudAdmins,
+                cloudEditors,
+                cloudAIUsers,
+                userRoles: draftUserRoles,
+                roleDefinitions: draftRoleDefinitions,
+            }).roleKey;
+
+        return SETTINGS_ROLE_OPTION_KEYS.includes(assignedRoleKey)
+            ? assignedRoleKey
+            : 'viewer';
+    };
+
+    const selectedManagedUser = validUserOptions.find((entry) => entry.email === selectedManagedUserEmail) || null;
+
+    const handleChangeUserRole = (email, roleKey) => {
+        if (!email || !roleKey) return;
+        const normalizedEmail = normalizePermissionEmail(email);
+        setDraftUserRoles((current) => ({
+            ...current,
+            [normalizedEmail]: roleKey,
+        }));
+    };
+
+    const handleToggleRoleAccess = ({ scope, accessKey, value }) => {
+        const nextDefinitions = updateRoleDefinitionAccess({
+            roleDefinitions: draftRoleDefinitions,
+            roleKey: selectedRoleKey,
+            scope,
+            accessKey,
+            value,
+        });
+        setDraftRoleDefinitions(nextDefinitions);
+    };
+
+    const handleSavePermissionSettings = async () => {
+        if (!permissionSettingsDirty) return;
+        setIsSavingPermissions(true);
+        try {
+            if (JSON.stringify(draftRoleDefinitions) !== JSON.stringify(resolvedRoleDefinitions)) {
+                await onSaveRoleDefinitions(draftRoleDefinitions);
+            }
+
+            const changedEmails = Object.keys({
+                ...(userRoles || {}),
+                ...(draftUserRoles || {}),
+            }).filter((email) => (draftUserRoles?.[email] || '') !== ((userRoles || {})[email] || ''));
+
+            for (const email of changedEmails) {
+                await onSaveUserRole(email, draftUserRoles[email]);
+            }
+
+            setModalConfig({
+                isOpen: true,
+                type: 'confirm',
+                title: '成功',
+                content: '角色與權限設定已儲存',
+                onConfirm: () => setModalConfig({ isOpen: false }),
+                confirmText: '好',
+                onCancel: null,
+            });
+        } catch (error) {
+            setModalConfig({
+                isOpen: true,
+                type: 'danger',
+                title: '錯誤',
+                content: `儲存失敗：${error.message}`,
+                onConfirm: () => setModalConfig({ isOpen: false }),
+                confirmText: '關閉',
+                onCancel: null,
+            });
+        } finally {
+            setIsSavingPermissions(false);
+        }
+    };
+
     const handleEmailServiceChange = (field, value) => {
         setEmailServiceConfig((prev) => ({ ...prev, [field]: value }));
     };
@@ -697,340 +978,331 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
     };
 
     return (
-        <div className="max-w-3xl mx-auto space-y-8 pb-12">
+        <div className="w-full space-y-6 pb-12" data-testid="settings-page-root">
             <Modal {...modalConfig} />
 
-            {/* User Registry List - Admin/Editor Only */}
-            {(isAdmin || isEditor) && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200" data-testid="registered-users">
-                <button
-                    onClick={() => setIsUserListExpanded(e => !e)}
-                    className="w-full flex items-center justify-between p-8 text-left hover:bg-slate-50 transition-colors rounded-xl"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 rounded-full"><Users className="text-blue-700" size={24} /></div>
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2>
-                            <p className="text-sm text-slate-500">檢視所有登入過系統的帳號</p>
-                        </div>
-                    </div>
-                    <ChevronRight size={20} className={`text-slate-400 transition-transform flex-shrink-0 ${isUserListExpanded ? 'rotate-90' : ''}`} />
-                </button>
-                {isUserListExpanded && (
-                <div className="px-8 pb-8 border-t border-slate-100">
-                <div className="overflow-x-auto mt-6">
-                    <table className="w-full text-sm text-left text-slate-600">
-                        <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
-                            <tr>
-                                <th className="px-4 py-3">使用者</th>
-                                <th className="px-4 py-3">User UID</th>
-                                <th className="px-4 py-3">最後上線</th>
-                                {isAdmin && <th className="px-4 py-3 text-right">操作</th>}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {userListError ? (
-                                <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
-                            ) : isUserListLoading ? (
-                                <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
-                            ) : allUsers.length === 0 ? (
-                                <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
-                            ) : (
-                                allUsers.map((u) => {
-                                    const lastSeenDate = u.lastSeen?.toDate
-                                        ? u.lastSeen.toDate()
-                                        : (u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000) : null);
-                                    const isSelf = user?.email && u.email === user.email;
-                                    const isRootAdmin = rootAdmins.includes(u.email);
-                                    const canDelete = isAdmin && !isSelf && !isRootAdmin;
-                                    return (
-                                        <tr key={u.uid} className="hover:bg-slate-50">
-                                            <td className="px-4 py-3 font-medium text-slate-800">{formatEmailPrefix(u.email)}</td>
-                                            <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
-                                            <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
-                                            {isAdmin && (
-                                                <td className="px-4 py-3 text-right">
-                                                    <button
-                                                        onClick={() => canDelete && confirmDeleteUser(u)}
-                                                        disabled={!canDelete}
-                                                        className={`p-1 rounded transition ${canDelete ? 'text-red-500 hover:text-red-700 hover:bg-red-50' : 'text-slate-300 cursor-not-allowed'}`}
-                                                        title={canDelete ? '刪除使用者' : (isSelf ? '不可刪除自己' : '不可刪除系統管理員')}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </td>
-                                            )}
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" data-testid="settings-tabs">
+                <div className="flex flex-wrap gap-2">
+                    {settingsTabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveSettingsTab(tab.id)}
+                            className={`rounded-xl px-5 py-2.5 text-sm font-medium transition ${
+                                activeSettingsTab === tab.id
+                                    ? 'bg-[#0075de] text-white shadow-sm'
+                                    : 'text-slate-500 hover:bg-slate-100'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
-                </div>
-                )}
             </div>
-            )}
 
-            {/* Gemini Settings - Admin Only */}
-            {isAdmin && (
-                <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="gemini-settings">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 rounded-full bg-purple-100">
-                            <Bot className="text-purple-700" size={24} />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800">Gemini API 設定</h2>
-                            <p className="text-sm text-slate-500">提供 AI 報告與會議摘要服務</p>
-                        </div>
-                    </div>
+            {activeSettingsTab === 'permissions' && ((canManageRoles || canManageRolePermissions) ? (
                     <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gemini API Key</label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="password"
-                                    value={geminiApiKeyInput}
-                                    onChange={(e) => setGeminiApiKeyInput(e.target.value)}
-                                    className="flex-1 p-2 border rounded"
-                                    placeholder="請輸入 Gemini API Key"
-                                    data-testid="gemini-api-key-input"
-                                />
-                                <button
-                                    onClick={fetchAvailableModels}
-                                    disabled={!geminiApiKeyInput.trim() || isLoadingModels}
-                                    className="px-3 py-2 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
-                                >
-                                    {isLoadingModels ? '載入中...' : '偵測模型'}
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">模型版本</label>
-                            <select
-                                value={geminiModelInput}
-                                onChange={(e) => setGeminiModelInput(e.target.value)}
-                                className="w-full p-2 border rounded"
-                            >
-                                {availableModels.length > 0 ? (
-                                    availableModels.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name}</option>
-                                    ))
-                                ) : (
-                                    <>
-                                        <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                    </>
-                                )}
-                            </select>
-                            <p className="text-xs text-slate-400 mt-1">
-                                {availableModels.length > 0
-                                    ? `已偵測到 ${availableModels.length} 個可用模型`
-                                    : '輸入 API Key 後點擊「偵測模型」可獲取完整模型列表'}
-                            </p>
-                        </div>
                         <div className="flex justify-end">
                             <button
-                                onClick={handleSaveGeminiSettingsLocal}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled={(!db && !testConfig.enabled) || isGeminiSaving}
-                                data-testid="gemini-api-key-save-button"
+                                type="button"
+                                onClick={handleSavePermissionSettings}
+                                disabled={!permissionSettingsDirty || isSavingPermissions}
+                                className="rounded-xl bg-[#0075de] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#005ec1] disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
-                                {isGeminiSaving ? '儲存中...' : '儲存 Gemini 設定'}
+                                {isSavingPermissions ? '儲存中...' : '儲存角色與權限'}
+                            </button>
+                        </div>
+                    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
+                        <section className={SETTINGS_MAIN_SECTION_CLASS} data-testid="settings-role-management">
+                            <div className={SETTINGS_SECTION_HEADER_CLASS} data-testid="settings-role-management-header">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">使用者角色管理</h2>
+                                    <p className="mt-1 text-sm text-slate-500">先選一位使用者，再指定他在系統裡的角色。</p>
+                                </div>
+                                {!canManageRoles && (
+                                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">僅檢視</span>
+                                )}
+                            </div>
+                            <div className="space-y-5">
+                                {validUserOptions.length === 0 ? (
+                                    <div className={`${SETTINGS_SUBSECTION_CLASS} border-dashed text-center text-sm text-slate-400`}>
+                                        目前還沒有註冊使用者資料
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className={SETTINGS_SUBSECTION_CLASS}>
+                                            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+                                                <div>
+                                                    <label htmlFor="settings-managed-user-select" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">選擇使用者</label>
+                                                    <select
+                                                        id="settings-managed-user-select"
+                                                        aria-label="選擇使用者"
+                                                        value={selectedManagedUserEmail}
+                                                        onChange={(event) => setSelectedManagedUserEmail(event.target.value)}
+                                                        className="w-full rounded-xl border border-[#bfcde0] bg-white px-3 py-3 text-sm text-slate-700"
+                                                    >
+                                                        {validUserOptions.map((account) => (
+                                                            <option key={account.uid || account.email} value={account.email}>
+                                                                {formatEmailPrefix(account.email)}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="settings-managed-user-role" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">角色設定</label>
+                                                    <select
+                                                        id="settings-managed-user-role"
+                                                        aria-label="角色設定"
+                                                        value={resolveDisplayedRoleKey(selectedManagedUserEmail)}
+                                                        onChange={(event) => handleChangeUserRole(selectedManagedUserEmail, event.target.value)}
+                                                        disabled={!canManageRoles || normalizePermissionEmail(user?.email) === normalizePermissionEmail(selectedManagedUserEmail)}
+                                                        className="w-full rounded-xl border border-[#bfcde0] bg-white px-3 py-3 text-sm text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                                    >
+                                                        {roleOptions.map((role) => (
+                                                            <option key={role.key} value={role.key}>{role.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {selectedManagedUser && (
+                                            <div className={SETTINGS_SUBSECTION_CLASS}>
+                                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                                    <div>
+                                                        <div className="font-medium text-slate-800">{formatEmailPrefix(selectedManagedUser.email)}</div>
+                                                        <div className="text-xs text-slate-400">{selectedManagedUser.email}</div>
+                                                    </div>
+                                                    {normalizePermissionEmail(user?.email) === normalizePermissionEmail(selectedManagedUser.email) && (
+                                                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700">自己的角色不可改</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </section>
+
+                        <section className={SETTINGS_MAIN_SECTION_CLASS} data-testid="settings-role-definitions">
+                            <div className={SETTINGS_SECTION_HEADER_CLASS} data-testid="settings-role-definitions-header">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">角色權限設定</h2>
+                                    <p className="mt-1 text-sm text-slate-500">只保留頁面存取設定，決定這個角色看得到哪些頁面。</p>
+                                </div>
+                                {!canManageRolePermissions && (
+                                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">僅檢視</span>
+                                )}
+                            </div>
+
+                            <div className="space-y-5">
+                                <div className={SETTINGS_SUBSECTION_CLASS} data-testid="settings-role-toolbar">
+                                    <label htmlFor="settings-role-select" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">目前編輯角色</label>
+                                    <StandardToolbarSelect id="settings-role-select" aria-label="目前編輯角色" value={selectedRoleKey} onChange={(event) => setSelectedRoleKey(event.target.value)} className="w-full">
+                                        {roleOptions.map((role) => (
+                                            <option key={role.key} value={role.key}>{role.label}</option>
+                                        ))}
+                                    </StandardToolbarSelect>
+                                </div>
+
+                                <div className={SETTINGS_SUBSECTION_CLASS}>
+                                    <h3 className="mb-2 text-sm font-semibold text-slate-700">頁面存取</h3>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {PERMISSION_PAGE_KEYS.map((pageKey) => {
+                                            return (
+                                                <label key={pageKey} className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-600">
+                                                    <div className="space-y-1">
+                                                        <div className="font-medium text-slate-700">{PAGE_ACCESS_LABELS[pageKey] || pageKey}</div>
+                                                        <div className="text-xs text-slate-400">{pageKey}</div>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(selectedRoleDefinition?.pageAccess?.[pageKey])}
+                                                        disabled={!canManageRolePermissions}
+                                                        onChange={(event) => handleToggleRoleAccess({
+                                                            scope: 'pageAccess',
+                                                            accessKey: pageKey,
+                                                            value: event.target.checked,
+                                                        })}
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                    </div>
+                ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-400">
+                        你目前可以查看系統設定，但不能變更角色或角色權限。
+                    </div>
+                ))}
+
+            {activeSettingsTab === 'registered-users' && (isAdmin || isEditor) && (
+                <div className={SETTINGS_PANEL_CLASS} data-testid="registered-users">
+                    <div className="border-b border-slate-100 px-8 py-6">
+                        <h2 className="text-xl font-bold text-slate-800">已註冊使用者列表</h2>
+                        <p className="mt-1 text-sm text-slate-500">獨立查看所有登入過系統的帳號資料。</p>
+                    </div>
+                    <div className="border-b border-slate-100 px-8 py-5">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_220px_220px]">
+                                <div>
+                                    <label htmlFor="registered-user-search" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">搜尋已註冊使用者</label>
+                                    <input
+                                        id="registered-user-search"
+                                        aria-label="搜尋已註冊使用者"
+                                        type="text"
+                                        value={registeredUserSearch}
+                                        onChange={(event) => setRegisteredUserSearch(event.target.value)}
+                                        placeholder="輸入姓名、Email 或 UID"
+                                        className="w-full rounded-xl border border-[#bfcde0] bg-white px-3 py-3 text-sm text-slate-700"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="registered-user-role-filter" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">角色篩選</label>
+                                    <StandardToolbarSelect
+                                        id="registered-user-role-filter"
+                                        aria-label="角色篩選"
+                                        value={registeredUserRoleFilter}
+                                        onChange={(event) => setRegisteredUserRoleFilter(event.target.value)}
+                                        className="w-full"
+                                    >
+                                        <option value="all">全部角色</option>
+                                        {roleOptions.map((role) => (
+                                            <option key={role.key} value={role.key}>{role.label}</option>
+                                        ))}
+                                    </StandardToolbarSelect>
+                                </div>
+                                <div>
+                                    <label htmlFor="registered-user-sort" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">排序方式</label>
+                                    <StandardToolbarSelect
+                                        id="registered-user-sort"
+                                        aria-label="排序方式"
+                                        value={registeredUserSort}
+                                        onChange={(event) => setRegisteredUserSort(event.target.value)}
+                                        className="w-full"
+                                    >
+                                        <option value="recent-desc">最近上線優先</option>
+                                        <option value="name-asc">姓名 A 到 Z</option>
+                                        <option value="name-desc">姓名 Z 到 A</option>
+                                    </StandardToolbarSelect>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto px-8 py-6">
+                        <table className="w-full text-sm text-left text-slate-600">
+                            <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+                                <tr>
+                                    <th className="px-4 py-3">使用者</th>
+                                    <th className="px-4 py-3">角色</th>
+                                    <th className="px-4 py-3">User UID</th>
+                                    <th className="px-4 py-3">最後上線</th>
+                                    {isAdmin && <th className="px-4 py-3 text-right">操作</th>}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {userListError ? (
+                                    <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-red-500">{userListError}</td></tr>
+                                ) : isUserListLoading ? (
+                                    <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">資料載入中...</td></tr>
+                                ) : paginatedRegisteredUsers.length === 0 ? (
+                                    <tr><td colSpan={userTableColSpan} className="px-4 py-4 text-center text-slate-400">尚無資料</td></tr>
+                                ) : (
+                                    paginatedRegisteredUsers.map((u) => {
+                                        const lastSeenDate = u.lastSeen?.toDate
+                                            ? u.lastSeen.toDate()
+                                            : (u.lastSeen?.seconds ? new Date(u.lastSeen.seconds * 1000) : null);
+                                        const isSelf = user?.email && u.email === user.email;
+                                        const isRootAdmin = rootAdmins.includes(u.email);
+                                        const canDelete = isAdmin && !isSelf && !isRootAdmin;
+                                        const roleKey = draftUserRoles[normalizePermissionEmail(u.email)] || 'viewer';
+                                        return (
+                                            <tr key={u.uid} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-medium text-slate-800" data-testid="registered-user-name">{formatEmailPrefix(u.email)}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                                        {getRoleLabel(roleKey)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.uid}</td>
+                                                <td className="px-4 py-3 text-xs">{lastSeenDate ? lastSeenDate.toLocaleString() : 'N/A'}</td>
+                                                {isAdmin && (
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            onClick={() => canDelete && confirmDeleteUser(u)}
+                                                            disabled={!canDelete}
+                                                            className={`p-1 rounded transition ${canDelete ? 'text-red-500 hover:text-red-700 hover:bg-red-50' : 'text-slate-300 cursor-not-allowed'}`}
+                                                            title={canDelete ? '刪除使用者' : (isSelf ? '不可刪除自己' : '不可刪除系統管理員')}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-8 py-4">
+                        <div className="text-sm text-slate-500">
+                            第 {registeredUsersPage} 頁，共 {totalRegisteredUsersPages} 頁
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setRegisteredUsersPage((page) => Math.max(1, page - 1))}
+                                disabled={registeredUsersPage === 1}
+                                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                            >
+                                上一頁
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRegisteredUsersPage((page) => Math.min(totalRegisteredUsersPages, page + 1))}
+                                disabled={registeredUsersPage === totalRegisteredUsersPages}
+                                className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                            >
+                                下一頁
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Notification Settings - Admin Only */}
-            {isAdmin && (
-                <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="notification-settings">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 rounded-full bg-amber-100">
-                            <Clock className="text-amber-700" size={24} />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800">郵件通知設定</h2>
-                            <p className="text-sm text-slate-500">設定 EmailJS 服務並手動發送 On-going 通知</p>
-                        </div>
-                    </div>
-                    {emailServiceError && (
-                        <div className="mb-4 text-sm text-red-600">{emailServiceError}</div>
-                    )}
-                    <div className="flex flex-col gap-4">
-                        <div className="pt-4 border-t border-slate-100 space-y-3">
-                            <h3 className="text-sm font-bold text-slate-700">EmailJS 發信服務設定</h3>
-                            <p className="text-xs text-slate-400">
-                                需先於 EmailJS 建立服務與範本，並提供 template params：to_email / subject / message / from_name。
-                            </p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service ID</label>
-                                    <input
-                                        type="text"
-                                        value={emailServiceConfig.serviceId}
-                                        onChange={(e) => handleEmailServiceChange('serviceId', e.target.value)}
-                                        className="w-full p-2 border rounded"
-                                        data-testid="emailjs-service-id"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Template ID</label>
-                                    <input
-                                        type="text"
-                                        value={emailServiceConfig.templateId}
-                                        onChange={(e) => handleEmailServiceChange('templateId', e.target.value)}
-                                        className="w-full p-2 border rounded"
-                                        data-testid="emailjs-template-id"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Public Key</label>
-                                    <input
-                                        type="text"
-                                        value={emailServiceConfig.publicKey}
-                                        onChange={(e) => handleEmailServiceChange('publicKey', e.target.value)}
-                                        className="w-full p-2 border rounded"
-                                        data-testid="emailjs-public-key"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">寄件人名稱</label>
-                                    <input
-                                        type="text"
-                                        value={emailServiceConfig.fromName}
-                                        onChange={(e) => handleEmailServiceChange('fromName', e.target.value)}
-                                        className="w-full p-2 border rounded"
-                                        placeholder="Job Management System"
-                                        data-testid="emailjs-from-name"
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleSaveEmailServiceSettings}
-                                    className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={!db || isEmailServiceSaving}
-                                    data-testid="emailjs-save-button"
-                                >
-                                    {isEmailServiceSaving ? '儲存中...' : '儲存 Email 服務'}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="pt-4 border-t border-slate-100" data-testid="notification-manual-trigger">
-                            <h3 className="text-sm font-bold text-slate-700 mb-2">發送 On-going 通知</h3>
-                            <p className="text-xs text-slate-400 mb-3">
-                                依目前 On-going 待辦與負責人資料寄送通知，不受每日限制，且不會更新每日寄送紀錄。
-                            </p>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleManualOnGoingNotification}
-                                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={isManualNotificationSending}
-                                    data-testid="notification-manual-trigger-button"
-                                >
-                                    {isManualNotificationSending ? '發送中...' : '立即發送 On-going 通知'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Admin Management Panel */}
-            {isAdmin && (
-                <div className="bg-yellow-50 p-8 rounded-xl shadow-sm border border-yellow-200" data-testid="admin-permission-section">
-                    <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-yellow-100 rounded-full"><UserCog className="text-yellow-700" size={24} /></div><div><h2 className="text-xl font-bold text-yellow-900">使用者權限管理</h2><p className="text-sm text-yellow-700">管理誰可以修改全域設定</p></div></div>
-                    <div className="flex gap-2 mb-6">
-                        <select
-                            value={newAdminEmail}
-                            onChange={(e) => setNewAdminEmail(e.target.value)}
-                            className="flex-1 p-2 border border-yellow-300 rounded-lg text-sm bg-white"
-                            data-testid="admin-email-input"
-                        >
-                            <option value="">選擇使用者</option>
-                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !rootAdmins.includes(u.email) && !cloudAdmins.includes(u.email)).map(u => (
-                                <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                            ))}
-                        </select>
-                        <button onClick={handleAddAdmin} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm whitespace-nowrap" data-testid="admin-email-submit">新增管理員</button>
-                    </div>
-                    <div className="bg-white rounded-lg border border-yellow-200 overflow-hidden"><ul className="divide-y divide-yellow-100">{rootAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-bold text-slate-700"><ShieldCheck size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded">系統預設</span></li>))}{cloudAdmins.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-yellow-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAdmin(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
-                </div>
-            )}
-
-            {/* Editor Management Panel */}
-            {isAdmin && (
-                <div className="bg-blue-50 p-8 rounded-xl shadow-sm border border-blue-200" data-testid="editor-permission-section">
-                    <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-blue-100 rounded-full"><User className="text-blue-700" size={24} /></div><div><h2 className="text-xl font-bold text-blue-900">編輯者權限管理</h2><p className="text-sm text-blue-700">可檢視與編輯所有資料及下拉選單設定</p></div></div>
-                    <div className="flex gap-2 mb-6">
-                        <select
-                            value={newEditorEmail}
-                            onChange={(e) => setNewEditorEmail(e.target.value)}
-                            className="flex-1 p-2 border border-blue-300 rounded-lg text-sm bg-white"
-                            data-testid="editor-email-input"
-                        >
-                            <option value="">選擇使用者</option>
-                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !rootAdmins.includes(u.email) && !cloudAdmins.includes(u.email) && !cloudEditors.includes(u.email)).map(u => (
-                                <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                            ))}
-                        </select>
-                        <button onClick={handleAddEditor} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap" data-testid="editor-email-submit">新增編輯者</button>
-                    </div>
-                    <div className="bg-white rounded-lg border border-blue-200 overflow-hidden"><ul className="divide-y divide-blue-100">{cloudEditors.length === 0 ? (<li className="px-4 py-3 text-sm text-slate-400">尚無編輯者</li>) : cloudEditors.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><ShieldCheck size={14} className="text-blue-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveEditor(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
-                </div>
-            )}
-
-            {/* AI User Management Panel */}
-            {isAdmin && (
-                <div className="bg-purple-50 p-8 rounded-xl shadow-sm border border-purple-200">
-                    <div className="flex items-center gap-3 mb-6"><div className="p-3 bg-purple-100 rounded-full"><Bot className="text-purple-700" size={24} /></div><div><h2 className="text-xl font-bold text-purple-900">AI 使用權限管理</h2><p className="text-sm text-purple-700">授予一般使用者 AI 總結功能的使用權限</p></div></div>
-                    <div className="flex gap-2 mb-6">
-                        <select
-                            value={newAIUserEmail}
-                            onChange={(e) => setNewAIUserEmail(e.target.value)}
-                            className="flex-1 p-2 border border-purple-300 rounded-lg text-sm bg-white"
-                        >
-                            <option value="">選擇使用者</option>
-                            {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !(cloudAIUsers || []).includes(u.email)).map(u => (
-                                <option key={u.uid} value={u.email}>{formatEmailPrefix(u.email)}</option>
-                            ))}
-                        </select>
-                        <button onClick={handleAddAIUser} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm whitespace-nowrap">新增 AI 使用者</button>
-                    </div>
-                    <div className="bg-white rounded-lg border border-purple-200 overflow-hidden"><ul className="divide-y divide-purple-100">{(!cloudAIUsers || cloudAIUsers.length === 0) ? (<li className="px-4 py-3 text-sm text-slate-400">尚無 AI 使用者</li>) : cloudAIUsers.map(email => (<li key={email} className="px-4 py-3 flex justify-between items-center text-sm"><span className="flex items-center gap-2 text-slate-700"><Sparkles size={14} className="text-purple-600"/> {formatEmailPrefix(email)}</span><button onClick={() => confirmRemoveAIUser(email)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"><Trash2 size={16} /></button></li>))}</ul></div>
-                </div>
-            )}
-
             {/* Team Management Panel */}
-            {canViewTeamPanel && (
-                <div className="bg-teal-50 p-8 rounded-xl shadow-sm border border-teal-200">
+            {activeSettingsTab === 'teams' && canViewTeamPanel && (
+                <div className={`${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-team-management">
                     <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 bg-teal-100 rounded-full"><Users className="text-teal-700" size={24} /></div>
+                        <div className="rounded-full bg-[#eaf3ff] p-3"><Users className="text-[#0075de]" size={24} /></div>
                         <div>
-                            <h2 className="text-xl font-bold text-teal-900">團隊管理</h2>
-                            <p className="text-sm text-teal-700">
+                            <h2 className="text-xl font-bold text-slate-800">團隊管理</h2>
+                            <p className="text-sm text-slate-500">
                                 {canEditTeams ? '設定團隊讓 Leader 可查看成員待辦事項' : '管理你的團隊成員'}
                             </p>
                         </div>
                     </div>
                     {/* 新增團隊表單 - 僅 Admin/Editor 可見 */}
                     {canEditTeams && (
-                        <div className="bg-white p-4 rounded-lg border border-teal-200 mb-4">
+                        <div className={`${SETTINGS_SUBSECTION_CLASS} mb-4`}>
                             <h3 className="font-bold text-slate-700 mb-3">新增團隊</h3>
                             <div className="mb-3">
                                 <label className="block text-xs text-slate-500 mb-1">團隊名稱</label>
-                                <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="輸入團隊名稱" className="w-full p-2 border border-teal-300 rounded-lg text-sm" />
+                                <input value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="輸入團隊名稱" className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-700" />
                             </div>
                             <div className="mb-3">
                                 <label className="block text-xs text-slate-500 mb-1">選擇 Leader（可多選）</label>
-                                <div className="max-h-32 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
+                                <div className="max-h-32 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
                                     {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => {
                                         const leaderList = newTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
                                         const isSelected = leaderList.includes(u.email.toLowerCase());
                                         return (
-                                            <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                            <label key={u.uid} className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-slate-100">
                                                 <input
                                                     type="checkbox"
                                                     checked={isSelected}
@@ -1041,7 +1313,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                             setNewTeamLeader(prev => prev.split(',').map(l => l.trim()).filter(l => l.toLowerCase() !== u.email.toLowerCase()).join(', '));
                                                         }
                                                     }}
-                                                    className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                    className="rounded border-slate-300 text-[#0075de] focus:ring-[#0075de]"
                                                 />
                                                 <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
                                             </label>
@@ -1049,8 +1321,8 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                     })}
                                 </div>
                             </div>
-                            <p className="text-xs text-teal-600 mb-3">團隊成員由 Leader 自行管理。</p>
-                            <button onClick={handleAddTeam} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm">建立團隊</button>
+                            <p className="mb-3 text-xs text-slate-500">團隊成員由 Leader 自行管理。</p>
+                            <button onClick={handleAddTeam} className="rounded-xl bg-[#0075de] px-4 py-2 text-sm text-white transition hover:bg-[#005ec1]">建立團隊</button>
                         </div>
                     )}
                     {/* 團隊列表 */}
@@ -1061,24 +1333,24 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                 return <p className="text-sm text-slate-400">{canEditTeams ? '尚無團隊' : '你目前沒有管理的團隊'}</p>;
                             }
                             return visibleTeams.map(team => (
-                                <div key={team.id} className="bg-white p-4 rounded-lg border border-teal-200">
+                                <div key={team.id} className={SETTINGS_SUBSECTION_CLASS}>
                                     {editingTeamId === team.id ? (
                                         /* 編輯模式 */
                                         <div className="space-y-3">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="block text-xs text-slate-500 mb-1">團隊名稱</label>
-                                                    <input value={editTeamName} onChange={(e) => setEditTeamName(e.target.value)} placeholder="團隊名稱" className="w-full p-2 border border-teal-300 rounded-lg text-sm" />
+                                                    <input value={editTeamName} onChange={(e) => setEditTeamName(e.target.value)} placeholder="團隊名稱" className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-700" />
                                                 </div>
                                                 {canEditTeams && (
                                                     <div>
                                                         <label className="block text-xs text-slate-500 mb-1">Leader（可多選）</label>
-                                                        <div className="max-h-32 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
+                                                        <div className="max-h-32 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
                                                             {allUsers.filter(u => u.email && u.email !== '(未填寫)').map(u => {
                                                                 const leaderList = editTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
                                                                 const isSelected = leaderList.includes(u.email.toLowerCase());
                                                                 return (
-                                                                    <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                                                    <label key={u.uid} className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-slate-100">
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={isSelected}
@@ -1089,7 +1361,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                                                     setEditTeamLeader(prev => prev.split(',').map(l => l.trim()).filter(l => l.toLowerCase() !== u.email.toLowerCase()).join(', '));
                                                                                 }
                                                                             }}
-                                                                            className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                                            className="rounded border-slate-300 text-[#0075de] focus:ring-[#0075de]"
                                                                         />
                                                                         <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
                                                                     </label>
@@ -1101,7 +1373,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-slate-500 mb-1">選擇成員</label>
-                                                <div className="max-h-40 overflow-y-auto border border-teal-200 rounded-lg p-2 bg-white">
+                                                <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
                                                     {(() => {
                                                         const leaderEmails = editTeamLeader.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
                                                         const memberList = editTeamMembers.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
@@ -1114,7 +1386,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                             <>
                                                                 {/* 顯示已不存在的成員（可移除） */}
                                                                 {orphanedMembers.map(m => (
-                                                                    <label key={m} className="flex items-center gap-2 p-1.5 hover:bg-red-50 rounded cursor-pointer bg-red-50">
+                                                                    <label key={m} className="flex cursor-pointer items-center gap-2 rounded-lg bg-red-50 p-1.5 hover:bg-red-100">
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={true}
@@ -1130,7 +1402,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                                 {allUsers.filter(u => u.email && u.email !== '(未填寫)' && !leaderEmails.includes(u.email.toLowerCase())).map(u => {
                                                                     const isSelected = memberList.includes(u.email.toLowerCase());
                                                                     return (
-                                                                        <label key={u.uid} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded cursor-pointer">
+                                                                        <label key={u.uid} className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-slate-100">
                                                                             <input
                                                                                 type="checkbox"
                                                                                 checked={isSelected}
@@ -1141,7 +1413,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                                                         setEditTeamMembers(prev => prev.split(',').map(m => m.trim()).filter(m => m.toLowerCase() !== u.email.toLowerCase()).join(', '));
                                                                                     }
                                                                                 }}
-                                                                                className="rounded border-teal-300 text-teal-600 focus:ring-teal-500"
+                                                                                className="rounded border-slate-300 text-[#0075de] focus:ring-[#0075de]"
                                                                             />
                                                                             <span className="text-sm text-slate-700">{formatEmailPrefix(u.email)}</span>
                                                                         </label>
@@ -1156,8 +1428,8 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => handleUpdateTeam(team.id)} className="px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm flex items-center gap-1"><Save size={14} /> 儲存</button>
-                                                <button onClick={cancelEditTeam} className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-sm flex items-center gap-1"><X size={14} /> 取消</button>
+                                                <button onClick={() => handleUpdateTeam(team.id)} className="flex items-center gap-1 rounded-xl bg-[#0075de] px-3 py-2 text-sm text-white transition hover:bg-[#005ec1]"><Save size={14} /> 儲存</button>
+                                                <button onClick={cancelEditTeam} className="flex items-center gap-1 rounded-xl bg-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-300"><X size={14} /> 取消</button>
                                             </div>
                                         </div>
                                     ) : (
@@ -1166,7 +1438,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                             <div className="flex justify-between items-start mb-2">
                                                 <div>
                                                     <h4 className="font-bold text-slate-800">{team.name}</h4>
-                                                    <p className="text-xs text-teal-600">Leader: {getTeamLeaders(team).map(l => formatEmailPrefix(l)).join(', ')}</p>
+                                                    <p className="text-xs text-slate-500">Leader: {getTeamLeaders(team).map(l => formatEmailPrefix(l)).join(', ')}</p>
                                                 </div>
                                                 <div className="flex gap-1">
                                                     {canManageTeam(team) && (
@@ -1179,7 +1451,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                                             </div>
                                             <div className="flex flex-wrap gap-1">
                                                 {team.members && team.members.length > 0 ? [...new Set(team.members)].map(m => (
-                                                    <span key={m} className="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-full">{formatEmailPrefix(m)}</span>
+                                                    <span key={m} className="rounded-full bg-[#eaf3ff] px-2 py-1 text-xs text-[#0075de]">{formatEmailPrefix(m)}</span>
                                                 )) : <span className="text-xs text-slate-400">尚無成員</span>}
                                             </div>
                                         </>
@@ -1191,7 +1463,8 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                 </div>
             )}
 
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200" data-testid="settings-global-options">
+            {activeSettingsTab === 'dropdowns' && (
+            <div className={`${SETTINGS_PANEL_CLASS} p-8`} data-testid="settings-global-options">
                 <div className="flex items-center gap-3 mb-6">
                     <div className={`p-3 rounded-full ${canEditDropdowns ? 'bg-violet-100' : 'bg-slate-100'}`}>
                         {canEditDropdowns ? <ShieldCheck className="text-violet-700" size={24} /> : <Lock className="text-slate-500" size={24} />}
@@ -1203,7 +1476,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                 </div>
 
                 <div className="space-y-6">
-                    <section className="rounded-xl border border-slate-200 p-5">
+                    <section className={SETTINGS_SUBSECTION_CLASS}>
                         <h3 className="text-lg font-bold text-slate-800 mb-4">待辦事項</h3>
                         <div className="space-y-5">
                             <div>
@@ -1219,7 +1492,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-slate-200 p-5">
+                    <section className={SETTINGS_SUBSECTION_CLASS}>
                         <h3 className="text-lg font-bold text-slate-800 mb-4">會議記錄</h3>
                         <div>
                             <div className="text-sm font-semibold text-slate-600 mb-2">會議分類</div>
@@ -1228,7 +1501,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                         </div>
                     </section>
 
-                    <section className="rounded-xl border border-slate-200 p-5">
+                    <section className={SETTINGS_SUBSECTION_CLASS}>
                         <h3 className="text-lg font-bold text-slate-800 mb-4">問題管理</h3>
                         <div className="space-y-5">
                             <div>
@@ -1250,6 +1523,7 @@ const SettingsPage = ({ db, user, isAdmin, isEditor, cloudAdmins, cloudEditors, 
                     </section>
                 </div>
             </div>
+            )}
         </div>
     );
 };

@@ -1,4 +1,5 @@
 import { buildCommentPayload, buildCommentSummary } from '../utils/comments';
+import { DEFAULT_ROLE_DEFINITIONS } from '../constants';
 import {
     buildAssignmentNotification,
     buildCommentNotifications,
@@ -27,6 +28,12 @@ export const buildInitialDemoState = () => ({
         { uid: 'user-leader', email: 'leader@test.com' },
         { uid: 'user-doris', email: 'doris@test.com' },
     ],
+    userRoles: {
+        'showchen@aivres.com': 'admin',
+        'leader@test.com': 'leader',
+        'doris@test.com': 'viewer',
+    },
+    roleDefinitions: DEFAULT_ROLE_DEFINITIONS,
     tasks: [
         {
             id: 'task-seed-1',
@@ -300,6 +307,15 @@ export const markDemoNotificationRead = (state, { userEmail, notificationId }) =
     ...state,
     notifications: (state.notifications || []).map((notification) => (
         notification.id === notificationId && notification.receiverEmail === userEmail
+            ? { ...notification, read: true, readAt: createDemoTimestamp(), updatedAt: createDemoTimestamp() }
+            : notification
+    )),
+});
+
+export const markAllDemoNotificationsRead = (state, { userEmail }) => ({
+    ...state,
+    notifications: (state.notifications || []).map((notification) => (
+        notification.receiverEmail === userEmail && !notification.read
             ? { ...notification, read: true, readAt: createDemoTimestamp(), updatedAt: createDemoTimestamp() }
             : notification
     )),

@@ -5,6 +5,8 @@ import CommentsDialog from '../Comments/CommentsDialog';
 
 const TaskRow = ({
     task,
+    canEdit = true,
+    canDelete = true,
     onEdit,
     onDelete,
     db,
@@ -75,24 +77,28 @@ const TaskRow = ({
                             </span>
                         )}
                     </button>
-                    <button
-                        type="button"
-                        aria-label="編輯任務"
-                        onClick={onEdit}
-                        className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
-                    >
-                        <Edit2 size={14} />
-                        編輯
-                    </button>
-                    <button
-                        type="button"
-                        aria-label="刪除任務"
-                        onClick={onDelete}
-                        className="inline-flex items-center gap-1 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
-                    >
-                        <Trash2 size={14} />
-                        刪除
-                    </button>
+                    {canEdit && (
+                        <button
+                            type="button"
+                            aria-label="編輯任務"
+                            onClick={onEdit}
+                            className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                        >
+                            <Edit2 size={14} />
+                            編輯
+                        </button>
+                    )}
+                    {canDelete && (
+                        <button
+                            type="button"
+                            aria-label="刪除任務"
+                            onClick={onDelete}
+                            className="inline-flex items-center gap-1 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
+                        >
+                            <Trash2 size={14} />
+                            刪除
+                        </button>
+                    )}
                 </div>
             </td>
         </tr>

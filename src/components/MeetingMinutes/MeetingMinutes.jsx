@@ -16,10 +16,10 @@ import {
     StandardToolbarSelect,
 } from '../common/StandardToolbar';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
-import { getTeamLeaders } from '../../utils/permissions';
+import { canPerformAction, getTeamLeaders } from '../../utils/permissions';
 import logger from '../../utils/logger';
 
-const MeetingMinutes = ({ db, user, canAccessAll, teams = [] }) => {
+const MeetingMinutes = ({ db, user, canAccessAll, teams = [], permissionContext = null }) => {
     const [meetings, setMeetings] = useState([]);
     const [filteredMeetings, setFilteredMeetings] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -29,6 +29,9 @@ const MeetingMinutes = ({ db, user, canAccessAll, teams = [] }) => {
     const [filterCategory, setFilterCategory] = useState('All');
     const [filterTeam, setFilterTeam] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
+    const canCreateMeeting = canPerformAction(permissionContext, 'meeting.create');
+    const canEditMeeting = canPerformAction(permissionContext, 'meeting.edit');
+    const canDeleteMeeting = canPerformAction(permissionContext, 'meeting.delete');
 
     const { isLeader, isRegularMember, userSelectableTeams, filterableTeams } = useTeamAccess(user, teams, canAccessAll);
 
@@ -84,7 +87,7 @@ const MeetingMinutes = ({ db, user, canAccessAll, teams = [] }) => {
         <StandardToolbar
             testId="meeting-toolbar"
             actions={(
-                <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentMeeting(null); setIsEditing(true); }}>
+                <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentMeeting(null); setIsEditing(true); }} disabled={!canCreateMeeting}>
                     <Plus size={16} /> 新增
                 </StandardToolbarButton>
             )}
@@ -108,7 +111,14 @@ const MeetingMinutes = ({ db, user, canAccessAll, teams = [] }) => {
         )}
         <div className="space-y-4">
             {filteredMeetings.map(meeting => (
-                <MeetingRow key={meeting.id} meeting={meeting} onEdit={() => { setCurrentMeeting(meeting); setIsEditing(true); }} onDelete={() => confirmDelete(meeting)} />
+                <MeetingRow
+                    key={meeting.id}
+                    meeting={meeting}
+                    canEdit={canEditMeeting}
+                    canDelete={canDeleteMeeting}
+                    onEdit={() => { setCurrentMeeting(meeting); setIsEditing(true); }}
+                    onDelete={() => confirmDelete(meeting)}
+                />
             ))}
             {filteredMeetings.length === 0 && <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">沒有資料</div>}
         </div>

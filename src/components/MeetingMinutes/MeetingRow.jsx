@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { ChevronRight, User } from 'lucide-react';
 import { formatEmailPrefix } from '../../utils/permissions';
 
-const MeetingRow = ({ meeting, onEdit, onDelete }) => {
+const MeetingRow = ({ meeting, onEdit, onDelete, canEdit = true, canDelete = true }) => {
     const [expanded, setExpanded] = useState(false);
     return (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden group">
@@ -17,7 +17,10 @@ const MeetingRow = ({ meeting, onEdit, onDelete }) => {
         {expanded && (
             <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50">
             <div className="mt-4 text-sm text-slate-700 leading-relaxed bg-white p-4 rounded border border-slate-200 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(meeting.content || "無詳細內容") }} />
-            <div className="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3"><button onClick={onEdit} className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600">編輯</button><button onClick={onDelete} className="px-3 py-1.5 text-sm bg-red-50 border border-red-200 rounded hover:bg-red-100 text-red-600">刪除</button></div>
+            <div className="mt-4 flex justify-end gap-2 border-t border-slate-200 pt-3">
+                {canEdit && <button onClick={onEdit} className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600">編輯</button>}
+                {canDelete && <button onClick={onDelete} className="px-3 py-1.5 text-sm bg-red-50 border border-red-200 rounded hover:bg-red-100 text-red-600">刪除</button>}
+            </div>
             </div>
         )}
         </div>

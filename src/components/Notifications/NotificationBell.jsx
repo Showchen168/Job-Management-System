@@ -6,6 +6,8 @@ const NotificationBell = ({
     notifications = [],
     onOpenTarget = () => {},
     onMarkAsRead = () => {},
+    onMarkAllAsRead = () => {},
+    canMarkAllAsRead = true,
 }) => {
     const [open, setOpen] = useState(false);
     const unreadCount = useMemo(
@@ -44,9 +46,21 @@ const NotificationBell = ({
                             <p className="text-sm font-semibold text-slate-800">通知</p>
                             <p className="text-xs text-slate-500">查看被指派與留言提醒</p>
                         </div>
-                        <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
-                            <CheckCheck size={12} />
-                            未讀 {unreadCount}
+                        <div className="flex items-center gap-2">
+                            {canMarkAllAsRead && unreadCount > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => onMarkAllAsRead()}
+                                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 transition hover:bg-slate-50"
+                                >
+                                    <CheckCheck size={12} />
+                                    全部已讀
+                                </button>
+                            )}
+                            <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">
+                                <CheckCheck size={12} />
+                                未讀 {unreadCount}
+                            </div>
                         </div>
                     </div>
 

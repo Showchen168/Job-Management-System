@@ -19,7 +19,7 @@ import {
 } from '../common/StandardToolbar';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
 import { useModal } from '../../hooks/useModal';
-import { formatEmailPrefix, getTeamLeaders, checkIsLeader, getLeaderTeamMembers } from '../../utils/permissions';
+import { canPerformAction, formatEmailPrefix, getTeamLeaders, checkIsLeader, getLeaderTeamMembers } from '../../utils/permissions';
 import {
     buildAssignmentNotification,
     buildNotificationTargetKey,
@@ -43,6 +43,7 @@ const IssueManager = ({
     demoState = null,
     onDemoStateChange = () => {},
     unreadCommentCountMap = {},
+    permissionContext = null,
 }) => {
     const [issues, setIssues] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
@@ -72,6 +73,9 @@ const IssueManager = ({
 
     const [assigneeOptions, setAssigneeOptions] = useState([]);
     const [userDirectoryMap, setUserDirectoryMap] = useState({});
+    const canCreateIssue = canPerformAction(permissionContext, 'issue.create');
+    const canEditIssue = canPerformAction(permissionContext, 'issue.edit');
+    const canDeleteIssue = canPerformAction(permissionContext, 'issue.delete');
 
     // 讀取負責人選項
     useEffect(() => {
@@ -335,7 +339,7 @@ const IssueManager = ({
                         <StandardToolbarButton type="button" onClick={handleExport}>
                             <Download size={16} /> 匯出
                         </StandardToolbarButton>
-                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentIssue(null); setIsEditing(true); }}>
+                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentIssue(null); setIsEditing(true); }} disabled={!canCreateIssue}>
                             <Plus size={16} /> 新增問題
                         </StandardToolbarButton>
                     </>
@@ -383,7 +387,8 @@ const IssueManager = ({
                                     issue={issue}
                                     onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
                                     onDelete={handleDelete}
-                                    canEdit={canAccessAll || issue.createdByEmail === user?.email}
+                                    canEdit={canEditIssue && (canAccessAll || issue.createdByEmail === user?.email)}
+                                    canDelete={canDeleteIssue && (canAccessAll || issue.createdByEmail === user?.email)}
                                     db={db}
                                     user={user}
                                     userDirectoryMap={userDirectoryMap}
@@ -429,7 +434,8 @@ const IssueManager = ({
                                             issue={issue}
                                             onEdit={i => { setCurrentIssue(i); setIsEditing(true); }}
                                             onDelete={handleDelete}
-                                            canEdit={canAccessAll || issue.createdByEmail === user?.email}
+                                            canEdit={canEditIssue && (canAccessAll || issue.createdByEmail === user?.email)}
+                                            canDelete={canDeleteIssue && (canAccessAll || issue.createdByEmail === user?.email)}
                                             db={db}
                                             user={user}
                                             userDirectoryMap={userDirectoryMap}

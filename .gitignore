@@ -16,9 +16,15 @@ package-lock.json
 # IDE
 .vscode/
 .idea/
+.serena/
 
 # OS
 .DS_Store
 Thumbs.db
 .gstack/
 diagnose-firebase.js
+
+# Local planning artifacts
+task_plan.md
+findings.md
+progress.md

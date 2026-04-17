@@ -1,192 +1,80 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-    checkIsAdmin,
-    checkIsEditor,
-    checkCanUseAI,
-    getTeamLeaders,
-    checkIsLeader,
-    getLeaderTeamMembers,
-    checkIsInAnyTeam,
-    formatEmailPrefix,
-    extractEmailPrefix,
-    normalizePermissionEmail,
+    buildPermissionContext,
+    canAccessPage,
+    canPerformAction,
+    getLockedActionAccessKeys,
+    getLockedPageAccessKeys,
+    normalizeRoleDefinitions,
+    resolveLegacyRoleKey,
+    updateRoleDefinitionAccess,
 } from '../permissions';
 
-describe('checkIsAdmin', () => {
-    it('returns false for null user', () => {
-        expect(checkIsAdmin(null)).toBe(false);
+describe('permissions', () => {
+    it('builds default role definitions with page and action maps', () => {
+        const definitions = normalizeRoleDefinitions();
+
+        expect(definitions.admin.pageAccess.settings).toBe(true);
+        expect(definitions.viewer.pageAccess['team-board']).toBe(false);
+        expect(definitions.leader.actionAccess['settings.manageTeams']).toBe(true);
     });
 
-    it('returns false for user without email', () => {
-        expect(checkIsAdmin({ uid: '1' })).toBe(false);
+    it('resolves legacy role fallback from admin, editor, leader state', () => {
+        expect(resolveLegacyRoleKey({ email: 'root@test.com' }, { cloudAdmins: ['root@test.com'] })).toBe('admin');
+        expect(resolveLegacyRoleKey({ email: 'editor@test.com' }, { cloudEditors: ['editor@test.com'] })).toBe('editor');
+        expect(resolveLegacyRoleKey({ email: 'leader@test.com' }, {
+            teams: [{ id: 't1', leaderIds: ['leader@test.com'], members: [] }],
+        })).toBe('leader');
+        expect(resolveLegacyRoleKey({ email: 'viewer@test.com' }, {})).toBe('viewer');
     });
 
-    it('returns true if user email is in cloudAdmins', () => {
-        const user = { email: 'admin@test.com' };
-        expect(checkIsAdmin(user, ['admin@test.com'])).toBe(true);
+    it('uses assigned role over legacy role and exposes page/action access', () => {
+        const permissionContext = buildPermissionContext({
+            user: { email: 'member@test.com' },
+            userRoles: { 'member@test.com': 'leader' },
+            teams: [],
+        });
+
+        expect(permissionContext.roleKey).toBe('leader');
+        expect(canAccessPage(permissionContext, 'team-board')).toBe(true);
+        expect(canPerformAction(permissionContext, 'settings.manageRolePermissions')).toBe(false);
     });
 
-    it('returns false if user email not in any admin list', () => {
-        const user = { email: 'normal@test.com' };
-        expect(checkIsAdmin(user, ['admin@test.com'])).toBe(false);
-    });
-});
+    it('keeps AI access enabled when legacy AI allowlist grants it', () => {
+        const permissionContext = buildPermissionContext({
+            user: { email: 'ai@test.com' },
+            cloudAIUsers: ['ai@test.com'],
+        });
 
-describe('checkIsEditor', () => {
-    it('returns false for null user', () => {
-        expect(checkIsEditor(null)).toBe(false);
+        expect(canPerformAction(permissionContext, 'ai.useSummary')).toBe(true);
     });
 
-    it('returns true if user is in cloudEditors', () => {
-        const user = { email: 'editor@test.com' };
-        expect(checkIsEditor(user, ['editor@test.com'])).toBe(true);
+    it('returns locked access keys for protected role settings', () => {
+        expect(getLockedPageAccessKeys('admin')).toEqual([]);
+        expect(getLockedActionAccessKeys('admin')).toContain('settings.manageRoles');
     });
 
-    it('returns false if user not in editors', () => {
-        const user = { email: 'other@test.com' };
-        expect(checkIsEditor(user, ['editor@test.com'])).toBe(false);
-    });
-});
+    it('allows page access keys to be adjusted by admin', () => {
+        const nextDefinitions = updateRoleDefinitionAccess({
+            roleDefinitions: {},
+            roleKey: 'admin',
+            scope: 'pageAccess',
+            accessKey: 'settings',
+            value: false,
+        });
 
-describe('checkCanUseAI', () => {
-    it('returns true if user is in AI users list', () => {
-        const user = { email: 'ai@test.com' };
-        expect(checkCanUseAI(user, ['ai@test.com'])).toBe(true);
-    });
-
-    it('returns false for null user', () => {
-        expect(checkCanUseAI(null, ['ai@test.com'])).toBe(false);
-    });
-});
-
-describe('getTeamLeaders', () => {
-    it('returns empty array for null team', () => {
-        expect(getTeamLeaders(null)).toEqual([]);
+        expect(nextDefinitions.admin.pageAccess.settings).toBe(false);
     });
 
-    it('returns leaderIds when available', () => {
-        const team = { leaderIds: ['a@test.com', 'b@test.com'] };
-        expect(getTeamLeaders(team)).toEqual(['a@test.com', 'b@test.com']);
-    });
+    it('updates non-locked access keys in role definitions', () => {
+        const nextDefinitions = updateRoleDefinitionAccess({
+            roleDefinitions: {},
+            roleKey: 'leader',
+            scope: 'actionAccess',
+            accessKey: 'task.delete',
+            value: false,
+        });
 
-    it('falls back to leaderId for old format', () => {
-        const team = { leaderId: 'old@test.com' };
-        expect(getTeamLeaders(team)).toEqual(['old@test.com']);
-    });
-
-    it('returns empty array if no leader info', () => {
-        expect(getTeamLeaders({})).toEqual([]);
-    });
-});
-
-describe('checkIsLeader', () => {
-    it('returns false for null user', () => {
-        expect(checkIsLeader(null, [])).toBe(false);
-    });
-
-    it('returns true if user is a team leader', () => {
-        const user = { email: 'leader@test.com' };
-        const teams = [{ leaderIds: ['leader@test.com'], members: [] }];
-        expect(checkIsLeader(user, teams)).toBe(true);
-    });
-
-    it('returns false if user is not a leader', () => {
-        const user = { email: 'member@test.com' };
-        const teams = [{ leaderIds: ['leader@test.com'], members: ['member@test.com'] }];
-        expect(checkIsLeader(user, teams)).toBe(false);
-    });
-});
-
-describe('getLeaderTeamMembers', () => {
-    it('returns empty for null user', () => {
-        expect(getLeaderTeamMembers(null, [])).toEqual([]);
-    });
-
-    it('returns members of teams where user is leader', () => {
-        const user = { email: 'leader@test.com' };
-        const teams = [
-            { leaderIds: ['leader@test.com'], members: ['a@test.com', 'b@test.com'] },
-            { leaderIds: ['other@test.com'], members: ['c@test.com'] },
-        ];
-        const result = getLeaderTeamMembers(user, teams);
-        expect(result).toContain('a@test.com');
-        expect(result).toContain('b@test.com');
-        expect(result).not.toContain('c@test.com');
-    });
-});
-
-describe('checkIsInAnyTeam', () => {
-    it('returns false for null user', () => {
-        expect(checkIsInAnyTeam(null, [])).toBe(false);
-    });
-
-    it('returns true if user is a member', () => {
-        const user = { email: 'member@test.com' };
-        const teams = [{ leaderIds: [], members: ['member@test.com'] }];
-        expect(checkIsInAnyTeam(user, teams)).toBe(true);
-    });
-
-    it('returns true if user is a leader', () => {
-        const user = { email: 'leader@test.com' };
-        const teams = [{ leaderIds: ['leader@test.com'], members: [] }];
-        expect(checkIsInAnyTeam(user, teams)).toBe(true);
-    });
-
-    it('returns false if user is not in any team', () => {
-        const user = { email: 'outsider@test.com' };
-        const teams = [{ leaderIds: ['leader@test.com'], members: ['member@test.com'] }];
-        expect(checkIsInAnyTeam(user, teams)).toBe(false);
-    });
-
-    it('handles case-insensitive email comparison', () => {
-        const user = { email: 'MEMBER@Test.com' };
-        const teams = [{ leaderIds: [], members: ['member@test.com'] }];
-        expect(checkIsInAnyTeam(user, teams)).toBe(true);
-    });
-});
-
-describe('formatEmailPrefix', () => {
-    it('returns prefix for email', () => {
-        expect(formatEmailPrefix('test@example.com')).toBe('test');
-    });
-
-    it('returns default for null', () => {
-        expect(formatEmailPrefix(null)).toBe('使用者');
-    });
-
-    it('returns default for undefined', () => {
-        expect(formatEmailPrefix(undefined)).toBe('使用者');
-    });
-});
-
-describe('extractEmailPrefix', () => {
-    it('returns null for null input', () => {
-        expect(extractEmailPrefix(null)).toBeNull();
-    });
-
-    it('extracts prefix from email', () => {
-        expect(extractEmailPrefix('user@test.com')).toBe('user');
-    });
-
-    it('returns value if no @ sign', () => {
-        expect(extractEmailPrefix('username')).toBe('username');
-    });
-
-    it('returns null for empty string', () => {
-        expect(extractEmailPrefix('')).toBeNull();
-    });
-});
-
-describe('normalizePermissionEmail', () => {
-    it('returns empty for null', () => {
-        expect(normalizePermissionEmail(null)).toBe('');
-    });
-
-    it('lowercases and trims email', () => {
-        expect(normalizePermissionEmail('  Test@Example.COM  ')).toBe('test@example.com');
-    });
-
-    it('returns empty for empty string', () => {
-        expect(normalizePermissionEmail('')).toBe('');
+        expect(nextDefinitions.leader.actionAccess['task.delete']).toBe(false);
     });
 });

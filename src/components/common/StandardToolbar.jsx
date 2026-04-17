@@ -45,16 +45,19 @@ export const StandardToolbarButton = ({
     children,
     variant = 'secondary',
     className = '',
+    disabled = false,
     ...props
 }) => {
     const variantClass = variant === 'primary'
         ? 'border-[#0075de] bg-[#0075de] text-white hover:bg-[#005bab] hover:border-[#005bab]'
         : 'border-[#bfcde0] bg-white text-slate-600 hover:bg-slate-50';
+    const disabledClass = disabled ? 'cursor-not-allowed opacity-50 hover:bg-inherit hover:border-inherit' : '';
 
     return (
         <button
             {...props}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium shadow-sm transition sm:w-auto ${variantClass} ${className}`}
+            disabled={disabled}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium shadow-sm transition sm:w-auto ${variantClass} ${disabledClass} ${className}`}
         >
             {children}
         </button>

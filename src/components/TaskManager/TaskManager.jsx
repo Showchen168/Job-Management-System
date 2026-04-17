@@ -17,7 +17,7 @@ import {
     StandardToolbarSelect,
 } from '../common/StandardToolbar';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
-import { formatEmailPrefix, getTeamLeaders } from '../../utils/permissions';
+import { canPerformAction, formatEmailPrefix, getTeamLeaders } from '../../utils/permissions';
 import {
     buildAssignmentNotification,
     buildNotificationTargetKey,
@@ -43,6 +43,7 @@ const TaskManager = ({
     demoState = null,
     onDemoStateChange = () => {},
     unreadCommentCountMap = {},
+    permissionContext = null,
 }) => {
     const [tasks, setTasks] = useState([]);
     const [filteredTasks, setFilteredTasks] = useState([]);
@@ -62,6 +63,9 @@ const TaskManager = ({
     const [showFilters, setShowFilters] = useState(false);
 
     const { isLeader, teamMemberEmails, isRegularMember, userSelectableTeams, filterableTeams } = useTeamAccess(user, teams, canAccessAll);
+    const canCreateTask = canPerformAction(permissionContext, 'task.create');
+    const canEditTask = canPerformAction(permissionContext, 'task.edit');
+    const canDeleteTask = canPerformAction(permissionContext, 'task.delete');
 
     // Leader 篩選用的負責人列表（只有自己所屬團隊的成員）
     const filterableAssignees = useMemo(() => {
@@ -340,7 +344,7 @@ const TaskManager = ({
                         <StandardToolbarButton type="button" onClick={handleExport}>
                             <Download size={16} /> 匯出
                         </StandardToolbarButton>
-                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentTask(null); setIsEditing(true); }}>
+                        <StandardToolbarButton type="button" variant="primary" onClick={() => { setCurrentTask(null); setIsEditing(true); }} disabled={!canCreateTask}>
                             <Plus size={16} /> 新增
                         </StandardToolbarButton>
                     </>
@@ -400,6 +404,8 @@ const TaskManager = ({
                     <TaskRow
                         key={task.id}
                         task={task}
+                        canEdit={canEditTask}
+                        canDelete={canDeleteTask}
                         onEdit={() => { setCurrentTask(task); setIsEditing(true); }}
                         onDelete={() => confirmDelete(task)}
                         db={db}
@@ -434,6 +440,8 @@ const TaskManager = ({
                             <TaskRow
                                 key={task.id}
                                 task={task}
+                                canEdit={canEditTask}
+                                canDelete={canDeleteTask}
                                 onEdit={() => { setCurrentTask(task); setIsEditing(true); }}
                                 onDelete={() => confirmDelete(task)}
                                 db={db}

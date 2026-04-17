@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import * as OpenCC from 'opencc-js';
 import {
@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 import { DEFAULT_CONFIG, ROOT_ADMINS, SYSTEM_CREATOR, APP_VERSION, LOCALE_STORAGE_KEY, DEFAULT_LOCALE } from './constants';
-import { checkIsAdmin, checkIsEditor, checkCanUseAI, checkIsLeader, checkIsInAnyTeam, formatEmailPrefix } from './utils/permissions';
+import { buildPermissionContext, canAccessPage, canPerformAction, checkIsInAnyTeam, formatEmailPrefix } from './utils/permissions';
 import { applyLocaleToDocument } from './utils/helpers';
 import logger from './utils/logger';
 
@@ -29,6 +29,7 @@ import {
     getDemoUser,
     getNotificationsForUser,
     loadDemoState,
+    markAllDemoNotificationsRead,
     markDemoNotificationRead,
     saveDemoState,
 } from './mock/demo-store';
@@ -47,6 +48,8 @@ const App = () => {
     const [cloudEditors, setCloudEditors] = useState([]);
     const [cloudAIUsers, setCloudAIUsers] = useState([]);
     const [teams, setTeams] = useState([]);
+    const [roleDefinitions, setRoleDefinitions] = useState({});
+    const [userRoles, setUserRoles] = useState({});
     const [locale, setLocale] = useState(() => localStorage.getItem(LOCALE_STORAGE_KEY) || DEFAULT_LOCALE);
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
@@ -254,6 +257,8 @@ const App = () => {
     useEffect(() => {
         if (!testConfig.enabled || !testConfig.demo || !demoState || !user?.email) return;
         setTeams(demoState.teams || []);
+        setRoleDefinitions(demoState.roleDefinitions || {});
+        setUserRoles(demoState.userRoles || {});
         setNotifications(getNotificationsForUser(demoState, user.email));
     }, [testConfig.enabled, testConfig.demo, demoState, user?.email]);
 
@@ -282,6 +287,18 @@ const App = () => {
         );
     }, [db, user?.uid, testConfig.enabled]);
 
+    useEffect(() => {
+        if (!db || testConfig.enabled) return undefined;
+        const ref = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'roleDefinitions');
+        return onSnapshot(ref, (snap) => setRoleDefinitions(snap.exists() ? (snap.data()?.list || {}) : {}));
+    }, [db, testConfig.enabled]);
+
+    useEffect(() => {
+        if (!db || testConfig.enabled) return undefined;
+        const ref = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'userRoles');
+        return onSnapshot(ref, (snap) => setUserRoles(snap.exists() ? (snap.data()?.list || {}) : {}));
+    }, [db, testConfig.enabled]);
+
     // Close mobile menu on tab change
     useEffect(() => { setIsMobileMenuOpen(false); }, [activeTab]);
 
@@ -304,13 +321,26 @@ const App = () => {
         return () => { document.body.style.overflow = ''; };
     }, [isMobileMenuOpen]);
 
-    const isUserAdmin = useMemo(() => checkIsAdmin(user, cloudAdmins), [user, cloudAdmins]);
-    const isUserEditor = useMemo(() => checkIsEditor(user, cloudEditors), [user, cloudEditors]);
-    const isUserCanUseAI = useMemo(() => checkCanUseAI(user, cloudAIUsers), [user, cloudAIUsers]);
-    const isUserLeader = useMemo(() => checkIsLeader(user, teams), [user, teams]);
+    const permissionContext = useMemo(() => buildPermissionContext({
+        user,
+        teams,
+        cloudAdmins,
+        cloudEditors,
+        cloudAIUsers,
+        userRoles,
+        roleDefinitions,
+    }), [user, teams, cloudAdmins, cloudEditors, cloudAIUsers, userRoles, roleDefinitions]);
+    const isUserAdmin = permissionContext.isAdmin;
+    const isUserEditor = permissionContext.isEditor;
+    const isUserLeader = permissionContext.isLeader;
     const isUserPrivileged = isUserAdmin || isUserEditor;
-    const canAccessSettings = isUserAdmin || isUserEditor || isUserLeader;
-    const canAccessTeamBoard = isUserAdmin || isUserEditor || isUserLeader;
+    const canAccessDashboard = canAccessPage(permissionContext, 'dashboard');
+    const canAccessTasks = canAccessPage(permissionContext, 'tasks');
+    const canAccessIssues = canAccessPage(permissionContext, 'issues');
+    const canAccessMeetings = canAccessPage(permissionContext, 'meetings');
+    const canAccessSettings = canAccessPage(permissionContext, 'settings');
+    const canAccessTeamBoard = canAccessPage(permissionContext, 'team-board');
+    const canMarkAllAsRead = canPerformAction(permissionContext, 'notification.markAllRead');
     const userDisplayName = useMemo(() => formatEmailPrefix(user?.email), [user]);
     const currentPageTitle = useMemo(() => {
         if (activeTab === 'dashboard') return '數據看板';
@@ -385,6 +415,97 @@ const App = () => {
             updatedAt: serverTimestamp(),
         });
     };
+
+    const handleMarkAllNotificationsAsRead = async () => {
+        if (!user?.email || !notifications.some((notification) => !notification.read)) return;
+
+        if (testConfig.demo) {
+            handleDemoStateChange((current) => markAllDemoNotificationsRead(current, {
+                userEmail: user.email,
+            }));
+            return;
+        }
+
+        if (!db) return;
+
+        const batch = writeBatch(db);
+        notifications
+            .filter((notification) => notification?.path && !notification.read)
+            .forEach((notification) => {
+                batch.update(doc(db, notification.path), {
+                    read: true,
+                    readAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                });
+            });
+
+        await batch.commit();
+    };
+
+    const handleSaveRoleDefinitions = async (nextDefinitions) => {
+        if (testConfig.demo) {
+            handleDemoStateChange((current) => ({
+                ...current,
+                roleDefinitions: nextDefinitions,
+            }));
+            return;
+        }
+        if (!db) return;
+        await setDoc(
+            doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'roleDefinitions'),
+            { list: nextDefinitions, updatedAt: serverTimestamp(), updatedBy: user?.email || null },
+            { merge: true }
+        );
+    };
+
+    const handleSaveUserRole = async (email, roleKey) => {
+        if (!email) return;
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const nextUserRoles = {
+            ...userRoles,
+            [normalizedEmail]: roleKey,
+        };
+
+        if (testConfig.demo) {
+            handleDemoStateChange((current) => ({
+                ...current,
+                userRoles: nextUserRoles,
+            }));
+            return;
+        }
+        if (!db) return;
+        await setDoc(
+            doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'userRoles'),
+            { list: nextUserRoles, updatedAt: serverTimestamp(), updatedBy: user?.email || null },
+            { merge: true }
+        );
+    };
+
+    useEffect(() => {
+        const accessMap = {
+            dashboard: canAccessDashboard,
+            tasks: canAccessTasks,
+            issues: canAccessIssues,
+            meetings: canAccessMeetings,
+            'team-board': canAccessTeamBoard,
+            settings: canAccessSettings,
+        };
+
+        if (accessMap[activeTab]) return;
+
+        const fallbackTab = Object.entries(accessMap).find(([, allowed]) => allowed)?.[0] || 'dashboard';
+        if (fallbackTab !== activeTab) {
+            setActiveTab(fallbackTab);
+        }
+    }, [
+        activeTab,
+        canAccessDashboard,
+        canAccessTasks,
+        canAccessIssues,
+        canAccessMeetings,
+        canAccessTeamBoard,
+        canAccessSettings,
+    ]);
 
     if (isAuthChecking) {
         return (
@@ -481,11 +602,11 @@ const App = () => {
                         </div>
                     </div>
                     <nav className={`flex-1 space-y-2 pb-4 ${isSidebarCollapsed ? 'px-3' : 'px-4'}`} aria-label="主要導覽">
-                        <NavButton active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" collapsed={isSidebarCollapsed} />
+                        {canAccessDashboard && <NavButton active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} icon={<LayoutDashboard size={20} />} label="數據看板" collapsed={isSidebarCollapsed} />}
                         {canAccessTeamBoard && <NavButton active={activeTab === 'team-board'} onClick={() => handleTabChange('team-board')} icon={<PanelsTopLeft size={20} />} label="團隊看板" collapsed={isSidebarCollapsed} />}
-                        <NavButton active={activeTab === 'tasks'} onClick={() => handleTabChange('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" collapsed={isSidebarCollapsed} />
-                        <NavButton active={activeTab === 'issues'} onClick={() => handleTabChange('issues')} icon={<AlertCircle size={20} />} label="問題管理" collapsed={isSidebarCollapsed} />
-                        <NavButton active={activeTab === 'meetings'} onClick={() => handleTabChange('meetings')} icon={<Users size={20} />} label="會議記錄" collapsed={isSidebarCollapsed} />
+                        {canAccessTasks && <NavButton active={activeTab === 'tasks'} onClick={() => handleTabChange('tasks')} icon={<CheckCircle2 size={20} />} label="待辦事項" collapsed={isSidebarCollapsed} />}
+                        {canAccessIssues && <NavButton active={activeTab === 'issues'} onClick={() => handleTabChange('issues')} icon={<AlertCircle size={20} />} label="問題管理" collapsed={isSidebarCollapsed} />}
+                        {canAccessMeetings && <NavButton active={activeTab === 'meetings'} onClick={() => handleTabChange('meetings')} icon={<Users size={20} />} label="會議記錄" collapsed={isSidebarCollapsed} />}
                     </nav>
                     <div className={`mb-4 rounded-[24px] border border-black/10 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.04)] ${isSidebarCollapsed ? 'mx-3 p-3' : 'mx-4 p-4'}`}>
                         <div className={`mb-4 flex ${isSidebarCollapsed ? 'justify-center' : 'items-center gap-3'}`}>
@@ -496,10 +617,10 @@ const App = () => {
                                 <div className="overflow-hidden flex-1">
                                     <div className="text-sm font-bold truncate text-slate-900" data-testid="user-display-name">{userDisplayName}</div>
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                        {isUserAdmin ? <span className="text-yellow-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Admin</span>
-                                         : isUserEditor ? <span className="text-blue-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Editor</span>
-                                         : isUserLeader ? <span className="text-teal-500 flex items-center gap-0.5"><ShieldCheck size={10}/> Leader</span>
-                                         : 'User'}
+                                        {isUserAdmin ? <span className="text-yellow-500 flex items-center gap-0.5"><ShieldCheck size={10}/> 管理員</span>
+                                         : isUserEditor ? <span className="text-blue-500 flex items-center gap-0.5"><ShieldCheck size={10}/> 編輯者</span>
+                                         : isUserLeader ? <span className="text-teal-500 flex items-center gap-0.5"><ShieldCheck size={10}/> 主管</span>
+                                         : permissionContext.roleLabel}
                                     </div>
                                 </div>
                             )}
@@ -544,6 +665,8 @@ const App = () => {
                                 notifications={notifications}
                                 onOpenTarget={handleOpenNotificationTarget}
                                 onMarkAsRead={handleMarkNotificationAsRead}
+                                onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+                                canMarkAllAsRead={canMarkAllAsRead}
                             />
                             <button type="button" aria-label="開啟選單" className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-sm md:hidden" onClick={() => setIsMobileMenuOpen(true)} data-testid="mobile-menu-button">
                                 <Menu size={18} />
@@ -552,12 +675,12 @@ const App = () => {
                     </div>
                 </div>
                 <div className="mx-auto max-w-7xl p-4 md:p-8">
-                    {activeTab === 'dashboard' && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
+                    {activeTab === 'dashboard' && canAccessDashboard && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                     {activeTab === 'tasks' && (
-                        <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} />
+                        <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} permissionContext={permissionContext} />
                     )}
-                    {activeTab === 'meetings' && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} teams={teams} />}
-                    {activeTab === 'issues' && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} />}
+                    {activeTab === 'meetings' && canAccessMeetings && <MeetingMinutes db={db} user={user} canAccessAll={isUserPrivileged} teams={teams} permissionContext={permissionContext} />}
+                    {activeTab === 'issues' && canAccessIssues && <IssueManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} permissionContext={permissionContext} />}
                     {activeTab === 'team-board' && canAccessTeamBoard && (
                         <TeamBoard
                             db={db}
@@ -579,7 +702,7 @@ const App = () => {
                     )}
                     {activeTab === 'settings' && (
                         canAccessSettings ? (
-                            <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} />
+                            <SettingsPage db={db} user={user} isAdmin={isUserAdmin} isEditor={isUserEditor} cloudAdmins={cloudAdmins} cloudEditors={cloudEditors} cloudAIUsers={cloudAIUsers} rootAdmins={ROOT_ADMINS} onSaveGeminiSettings={handleSaveGeminiSettings} testConfig={testConfig} geminiApiKey={geminiApiKey} geminiModel={geminiModel} teams={teams} permissionContext={permissionContext} roleDefinitions={roleDefinitions} userRoles={userRoles} onSaveRoleDefinitions={handleSaveRoleDefinitions} onSaveUserRole={handleSaveUserRole} demoUsers={demoState?.users || []} />
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                 <ShieldAlert size={48} className="mb-4" />

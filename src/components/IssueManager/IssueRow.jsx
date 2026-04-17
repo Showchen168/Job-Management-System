@@ -8,6 +8,7 @@ const IssueRow = ({
     onEdit,
     onDelete,
     canEdit,
+    canDelete = canEdit,
     db,
     user,
     userDirectoryMap,
@@ -94,16 +95,18 @@ const IssueRow = ({
                                     <Edit2 size={14} />
                                     編輯
                                 </button>
-                                <button
-                                    type="button"
-                                    aria-label="刪除問題"
-                                    onClick={() => onDelete(issue)}
-                                    className="inline-flex items-center gap-1 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
-                                >
-                                    <Trash2 size={14} />
-                                    刪除
-                                </button>
                             </>
+                        )}
+                        {canDelete && (
+                            <button
+                                type="button"
+                                aria-label="刪除問題"
+                                onClick={() => onDelete(issue)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100"
+                            >
+                                <Trash2 size={14} />
+                                刪除
+                            </button>
                         )}
                     </div>
                 </td>
