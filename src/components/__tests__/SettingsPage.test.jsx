@@ -52,6 +52,7 @@ describe('SettingsPage', () => {
         expect(screen.getByText('使用者角色管理')).toBeInTheDocument();
         expect(screen.getByText('角色權限設定')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '儲存角色與權限' })).toBeInTheDocument();
+        expect(within(screen.getByTestId('settings-tabs')).getByRole('button', { name: '儲存角色與權限' })).toBeInTheDocument();
         expect(screen.getByLabelText('選擇使用者')).toBeInTheDocument();
         expect(screen.getByLabelText('角色設定')).toBeInTheDocument();
         expect(screen.queryByText('設定頁管理')).not.toBeInTheDocument();
@@ -99,7 +100,9 @@ describe('SettingsPage', () => {
         );
 
         expect(screen.getByTestId('settings-page-root')).toHaveClass('w-full');
-        const tabs = within(screen.getByTestId('settings-tabs')).getAllByRole('button').map((button) => button.textContent);
+        const tabs = within(screen.getByTestId('settings-tabs')).getAllByRole('button')
+            .map((button) => button.textContent)
+            .filter((label) => label !== '儲存角色與權限');
         expect(tabs).toEqual(['已註冊使用者', '角色與權限', '團隊與成員', '下拉選單']);
         expect(screen.queryByRole('button', { name: 'AI 與通知' })).not.toBeInTheDocument();
 

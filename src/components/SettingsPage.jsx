@@ -1009,36 +1009,39 @@ const SettingsPage = ({
             <Modal {...modalConfig} />
 
             <div className="sticky top-[69px] z-20 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)]" data-testid="settings-tabs">
-                <div className="flex flex-wrap gap-2">
-                    {settingsTabs.map((tab) => (
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                        {settingsTabs.map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveSettingsTab(tab.id)}
+                                className={`rounded-xl px-5 py-2.5 text-sm font-medium transition ${
+                                    activeSettingsTab === tab.id
+                                        ? 'bg-[#0075de] text-white shadow-sm'
+                                        : 'text-slate-500 hover:bg-slate-100'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {activeSettingsTab === 'permissions' && (canManageRoles || canManageRolePermissions) && (
                         <button
-                            key={tab.id}
                             type="button"
-                            onClick={() => setActiveSettingsTab(tab.id)}
-                            className={`rounded-xl px-5 py-2.5 text-sm font-medium transition ${
-                                activeSettingsTab === tab.id
-                                    ? 'bg-[#0075de] text-white shadow-sm'
-                                    : 'text-slate-500 hover:bg-slate-100'
-                            }`}
+                            onClick={handleSavePermissionSettings}
+                            disabled={!permissionSettingsDirty || isSavingPermissions}
+                            className="self-start rounded-xl bg-[#0075de] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#005ec1] disabled:cursor-not-allowed disabled:bg-slate-300 lg:self-auto"
                         >
-                            {tab.label}
+                            {isSavingPermissions ? '儲存中...' : '儲存角色與權限'}
                         </button>
-                    ))}
+                    )}
                 </div>
             </div>
 
             {activeSettingsTab === 'permissions' && ((canManageRoles || canManageRolePermissions) ? (
                     <div className="mt-6 space-y-4">
-                        <div className="flex justify-end">
-                            <button
-                                type="button"
-                                onClick={handleSavePermissionSettings}
-                                disabled={!permissionSettingsDirty || isSavingPermissions}
-                                className="rounded-xl bg-[#0075de] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#005ec1] disabled:cursor-not-allowed disabled:bg-slate-300"
-                            >
-                                {isSavingPermissions ? '儲存中...' : '儲存角色與權限'}
-                            </button>
-                        </div>
                     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
                         <section className={SETTINGS_MAIN_SECTION_CLASS} data-testid="settings-role-management">
                             <div className={SETTINGS_SECTION_HEADER_CLASS} data-testid="settings-role-management-header">
