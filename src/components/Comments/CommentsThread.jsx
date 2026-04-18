@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import CommentsPanel from './CommentsPanel';
-import { buildCommentPayload, buildCommentSummary } from '../../utils/comments';
+import { buildCommentPayload, buildCommentSummary, buildCommentThreadSummary } from '../../utils/comments';
 import { buildCommentNotifications } from '../../utils/notifications-center';
 import { pushNotification } from '../../utils/notification-store';
 import logger from '../../utils/logger';
-import { addDemoComment } from '../../mock/demo-store';
+import { addDemoComment, deleteDemoComment, editDemoComment } from '../../mock/demo-store';
 
 const formatCommentTimestamp = (timestamp) => {
     if (!timestamp) return '剛剛';
@@ -66,6 +66,19 @@ const CommentsThread = ({
 
     const sortedComments = useMemo(() => comments, [comments]);
 
+    const updateThreadSummary = async (nextComments) => {
+        if (!db || !item?.path) return;
+
+        const summary = buildCommentThreadSummary(nextComments);
+        await updateDoc(doc(db, item.path), {
+            commentCount: summary.commentCount,
+            lastCommentBy: summary.lastCommentBy,
+            lastCommentPreview: summary.lastCommentPreview,
+            lastCommentAt: summary.lastCommentAt,
+            updatedAt: serverTimestamp(),
+        });
+    };
+
     const handleSubmit = async (content) => {
         if (demoMode) {
             onDemoStateChange((current) => addDemoComment(current, {
@@ -119,10 +132,80 @@ const CommentsThread = ({
         }
     };
 
+    const handleEdit = async (commentId, content) => {
+        const targetComment = comments.find((comment) => comment.id === commentId);
+        if (!targetComment || targetComment.createdByEmail !== user?.email) return;
+
+        if (demoMode) {
+            onDemoStateChange((current) => editDemoComment(current, {
+                entityType,
+                itemId: item.id,
+                commentId,
+                actorEmail: user.email,
+                content,
+            }));
+            return;
+        }
+
+        if (!db || !item?.path) return;
+
+        const nextComments = comments.map((comment) => (
+            comment.id === commentId
+                ? { ...comment, content: String(content || '').trim(), updatedAt: new Date().toISOString() }
+                : comment
+        ));
+
+        setSubmitting(true);
+        try {
+            await updateDoc(doc(db, item.path, 'comments', commentId), {
+                content: String(content || '').trim(),
+                updatedAt: serverTimestamp(),
+            });
+
+            await updateThreadSummary(nextComments);
+        } catch (error) {
+            logger.error('Edit comment error:', error);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDelete = async (commentId) => {
+        const targetComment = comments.find((comment) => comment.id === commentId);
+        if (!targetComment || targetComment.createdByEmail !== user?.email) return;
+
+        if (demoMode) {
+            onDemoStateChange((current) => deleteDemoComment(current, {
+                entityType,
+                itemId: item.id,
+                commentId,
+                actorEmail: user.email,
+            }));
+            return;
+        }
+
+        if (!db || !item?.path) return;
+
+        const nextComments = comments.filter((comment) => comment.id !== commentId);
+
+        setSubmitting(true);
+        try {
+            await deleteDoc(doc(db, item.path, 'comments', commentId));
+            await updateThreadSummary(nextComments);
+        } catch (error) {
+            logger.error('Delete comment error:', error);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <CommentsPanel
             comments={sortedComments}
+            currentUserEmail={user?.email || ''}
             onSubmit={handleSubmit}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
             submitting={submitting}
         />
     );

@@ -1,4 +1,4 @@
-import { buildCommentPayload, buildCommentSummary } from '../utils/comments';
+import { buildCommentPayload, buildCommentSummary, buildCommentThreadSummary } from '../utils/comments';
 import { DEFAULT_ROLE_DEFINITIONS } from '../constants';
 import {
     buildAssignmentNotification,
@@ -301,6 +301,65 @@ export const addDemoComment = (state, { entityType, itemId, actorEmail, content 
     });
 
     return notifications.reduce((acc, notification) => appendNotification(acc, notification), nextState);
+};
+
+export const editDemoComment = (state, { entityType, itemId, commentId, actorEmail, content }) => {
+    const collectionKey = entityType === 'issue' ? 'issues' : 'tasks';
+    const currentItems = state[collectionKey] || [];
+    const currentItem = currentItems.find((item) => item.id === itemId);
+    if (!currentItem) return state;
+
+    const currentComments = currentItem.comments || [];
+    const targetComment = currentComments.find((comment) => comment.id === commentId);
+    if (!targetComment || targetComment.createdByEmail !== actorEmail) return state;
+
+    const updatedComments = currentComments.map((comment) => (
+        comment.id === commentId
+            ? {
+                ...comment,
+                content: String(content || '').trim(),
+                updatedAt: createDemoTimestamp(),
+            }
+            : comment
+    ));
+
+    const summary = buildCommentThreadSummary(updatedComments);
+    const updatedItem = {
+        ...currentItem,
+        comments: updatedComments,
+        ...summary,
+        updatedAt: createDemoTimestamp(),
+    };
+
+    return {
+        ...state,
+        [collectionKey]: currentItems.map((item) => (item.id === itemId ? updatedItem : item)),
+    };
+};
+
+export const deleteDemoComment = (state, { entityType, itemId, commentId, actorEmail }) => {
+    const collectionKey = entityType === 'issue' ? 'issues' : 'tasks';
+    const currentItems = state[collectionKey] || [];
+    const currentItem = currentItems.find((item) => item.id === itemId);
+    if (!currentItem) return state;
+
+    const currentComments = currentItem.comments || [];
+    const targetComment = currentComments.find((comment) => comment.id === commentId);
+    if (!targetComment || targetComment.createdByEmail !== actorEmail) return state;
+
+    const updatedComments = currentComments.filter((comment) => comment.id !== commentId);
+    const summary = buildCommentThreadSummary(updatedComments);
+    const updatedItem = {
+        ...currentItem,
+        comments: updatedComments,
+        ...summary,
+        updatedAt: createDemoTimestamp(),
+    };
+
+    return {
+        ...state,
+        [collectionKey]: currentItems.map((item) => (item.id === itemId ? updatedItem : item)),
+    };
 };
 
 export const markDemoNotificationRead = (state, { userEmail, notificationId }) => ({

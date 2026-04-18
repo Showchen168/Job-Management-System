@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     buildCommentPayload,
     buildCommentSummary,
+    buildCommentThreadSummary,
     mergeCommentMetadata,
 } from '../comments';
 
@@ -64,6 +65,43 @@ describe('mergeCommentMetadata', () => {
             commentCount: 4,
             lastCommentBy: 'show',
             lastCommentPreview: '請補測試',
+        });
+    });
+});
+
+describe('buildCommentThreadSummary', () => {
+    it('rebuilds card summary from the latest comment in the thread', () => {
+        const summary = buildCommentThreadSummary([
+            {
+                id: 'comment-1',
+                content: '先確認桌機版',
+                createdByEmail: 'doris@test.com',
+                createdAt: '2026-04-18T09:00:00.000Z',
+            },
+            {
+                id: 'comment-2',
+                content: '手機版我也一起修',
+                createdByEmail: 'show@test.com',
+                createdAt: '2026-04-18T10:00:00.000Z',
+            },
+        ]);
+
+        expect(summary).toMatchObject({
+            commentCount: 2,
+            lastCommentBy: 'show',
+            lastCommentPreview: '手機版我也一起修',
+            lastCommentAt: '2026-04-18T10:00:00.000Z',
+        });
+    });
+
+    it('clears summary when all comments are deleted', () => {
+        const summary = buildCommentThreadSummary([]);
+
+        expect(summary).toMatchObject({
+            commentCount: 0,
+            lastCommentBy: '',
+            lastCommentPreview: '',
+            lastCommentAt: null,
         });
     });
 });
