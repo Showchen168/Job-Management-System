@@ -139,6 +139,46 @@ describe('App layout', () => {
 
         expect(screen.getByTestId('sidebar-brand-header')).toHaveClass('min-w-0');
         expect(screen.getByTestId('sidebar-brand-title')).toHaveClass('truncate', 'whitespace-nowrap');
-        expect(screen.getByTestId('sidebar-brand-version')).toHaveClass('shrink-0', 'whitespace-nowrap');
+        expect(screen.queryByTestId('sidebar-brand-version')).not.toBeInTheDocument();
+    });
+
+    it('renders a restrained grouped sidebar without extra descriptive copy', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('desktop-sidebar')).toHaveClass('md:w-[248px]');
+        expect(screen.getByTestId('sidebar-brand-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('sidebar-account-card')).toBeInTheDocument();
+        expect(screen.getByText('工作區')).toBeInTheDocument();
+        expect(screen.getByText('流程追蹤')).toBeInTheDocument();
+        expect(screen.queryByText('JMS Workspace')).not.toBeInTheDocument();
+        expect(screen.queryByText('目前焦點')).not.toBeInTheDocument();
+        expect(screen.queryByText('已登入帳號')).not.toBeInTheDocument();
+        expect(screen.queryByText('協作、追蹤與問題處理工作台')).not.toBeInTheDocument();
+    });
+
+    it('keeps the desktop sidebar toggle available from the brand panel', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('desktop-sidebar-toggle')).toBeInTheDocument();
+    });
+
+    it('shows the locale switcher in the top-right header actions without extra locale label text', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('workspace-topbar-actions')).toContainElement(screen.getByTestId('locale-toggle-button'));
+        expect(screen.queryByTestId('locale-toggle')).not.toBeInTheDocument();
+        expect(screen.queryByText('語系')).not.toBeInTheDocument();
     });
 });

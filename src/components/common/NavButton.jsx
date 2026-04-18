@@ -5,14 +5,14 @@ const NavButton = ({ active, onClick, icon, label, collapsed = false }) => (
         onClick={onClick}
         aria-label={label}
         title={label}
-        className={`w-full flex items-center rounded-2xl border px-4 py-3 text-left transition-all ${
+        className={`flex w-full items-center rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
             active
-                ? 'bg-white text-slate-900 border-slate-200 shadow-[0_10px_30px_rgba(15,23,42,0.08)]'
-                : 'text-slate-500 border-transparent hover:bg-white/80 hover:border-slate-200 hover:text-slate-900'
-        } ${collapsed ? 'justify-center px-3' : 'gap-3'}`}
+                ? 'border-[#d6e7fb] bg-[#eef6ff] text-slate-900'
+                : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-900'
+        } ${collapsed ? 'justify-center px-2.5' : 'gap-3'}`}
     >
         <span className={active ? 'text-[#0075de]' : 'text-slate-400'}>{icon}</span>
-        {!collapsed && <span className="font-medium">{label}</span>}
+        {!collapsed && <span className="truncate font-medium">{label}</span>}
     </button>
 );
 
