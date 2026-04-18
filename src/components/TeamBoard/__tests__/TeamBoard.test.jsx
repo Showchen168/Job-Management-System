@@ -85,6 +85,20 @@ describe('TeamBoard', () => {
         expect(within(dialog).getByText('先調整桌機 spacing')).toBeInTheDocument();
     });
 
+    it('allows dragging the board left and right with the mouse', () => {
+        render(<TeamBoard {...baseProps} />);
+
+        const scroller = screen.getByTestId('team-board-column-scroller');
+        scroller.scrollLeft = 120;
+
+        fireEvent.pointerDown(scroller, { clientX: 200, pointerId: 1, button: 0 });
+        fireEvent.pointerMove(scroller, { clientX: 140, pointerId: 1 });
+
+        expect(scroller.scrollLeft).toBe(180);
+
+        fireEvent.pointerUp(scroller, { pointerId: 1 });
+    });
+
     it('moves completed cards into the archive section and keeps last edited time visible', () => {
         render(<TeamBoard {...baseProps} />);
 

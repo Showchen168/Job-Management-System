@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { collection, collectionGroup, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { Filter, MessageSquare } from 'lucide-react';
 import { useTeamAccess } from '../../hooks/useTeamAccess';
@@ -39,7 +39,28 @@ const TeamBoard = ({
     const [selectedType, setSelectedType] = useState('All');
     const [selectedStatus, setSelectedStatus] = useState('All');
     const [selectedItem, setSelectedItem] = useState(null);
+    const [isBoardDragging, setIsBoardDragging] = useState(false);
     const { filterableTeams } = useTeamAccess(user, teams, canAccessAll);
+    const boardDragStateRef = useRef({
+        active: false,
+        moved: false,
+        pointerId: null,
+        startX: 0,
+        startScrollLeft: 0,
+    });
+    const suppressBoardClickRef = useRef(false);
+
+    const safelyTogglePointerCapture = (target, methodName, pointerId) => {
+        if (!target || pointerId === null || typeof pointerId === 'undefined') {
+            return;
+        }
+
+        try {
+            target[methodName]?.(pointerId);
+        } catch {
+            // Ignore capture sync mismatches so dragging still degrades gracefully.
+        }
+    };
 
     useEffect(() => {
         if (demoMode) {
@@ -175,8 +196,88 @@ const TeamBoard = ({
         Array.from(new Set(normalizedItems.map((item) => item.status).filter(Boolean)))
     ), [normalizedItems]);
 
+    const endBoardDrag = (target) => {
+        const currentState = boardDragStateRef.current;
+
+        if (currentState.pointerId !== null) {
+            safelyTogglePointerCapture(target, 'releasePointerCapture', currentState.pointerId);
+        }
+
+        boardDragStateRef.current = {
+            active: false,
+            moved: false,
+            pointerId: null,
+            startX: 0,
+            startScrollLeft: 0,
+        };
+        setIsBoardDragging(false);
+
+        if (suppressBoardClickRef.current && typeof window !== 'undefined') {
+            window.setTimeout(() => {
+                suppressBoardClickRef.current = false;
+            }, 0);
+        }
+    };
+
+    const handleBoardPointerDown = (event) => {
+        if (typeof event.button === 'number' && event.button !== 0) {
+            return;
+        }
+
+        boardDragStateRef.current = {
+            active: true,
+            moved: false,
+            pointerId: event.pointerId ?? null,
+            startX: event.clientX,
+            startScrollLeft: event.currentTarget.scrollLeft,
+        };
+        suppressBoardClickRef.current = false;
+        safelyTogglePointerCapture(event.currentTarget, 'setPointerCapture', event.pointerId);
+    };
+
+    const handleBoardPointerMove = (event) => {
+        const currentState = boardDragStateRef.current;
+        if (!currentState.active) {
+            return;
+        }
+
+        const deltaX = event.clientX - currentState.startX;
+        if (Math.abs(deltaX) > 3) {
+            if (!currentState.moved) {
+                setIsBoardDragging(true);
+            }
+            currentState.moved = true;
+            suppressBoardClickRef.current = true;
+        }
+
+        event.currentTarget.scrollLeft = currentState.startScrollLeft - deltaX;
+
+        if (currentState.moved) {
+            event.preventDefault();
+        }
+    };
+
+    const handleBoardClickCapture = (event) => {
+        if (!suppressBoardClickRef.current) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        suppressBoardClickRef.current = false;
+    };
+
     const renderColumns = (columnSet, { archived = false } = {}) => (
-        <div className="overflow-x-auto pb-2">
+        <div
+            data-testid="team-board-column-scroller"
+            className={`overflow-x-auto pb-2 ${isBoardDragging ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+            onPointerDown={handleBoardPointerDown}
+            onPointerMove={handleBoardPointerMove}
+            onPointerUp={(event) => endBoardDrag(event.currentTarget)}
+            onPointerCancel={(event) => endBoardDrag(event.currentTarget)}
+            onLostPointerCapture={(event) => endBoardDrag(event.currentTarget)}
+            onClickCapture={handleBoardClickCapture}
+        >
             <div className="flex min-w-max gap-5">
                 {columnSet.map((column) => (
                     <section key={`${archived ? 'archived' : 'active'}-${column.memberEmail}`} className={`w-[19rem] flex-shrink-0 rounded-[28px] border border-[color:var(--border-soft)] p-4 shadow-sm ${archived ? 'bg-slate-50/80 opacity-85' : 'bg-[linear-gradient(180deg,#ffffff_0%,#fbfaf8_100%)]'}`}>
