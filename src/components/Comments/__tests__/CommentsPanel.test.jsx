@@ -23,23 +23,38 @@ describe('CommentsPanel', () => {
         expect(onSubmit).toHaveBeenCalledWith('我來處理');
     });
 
-    it('only shows edit and delete actions for the comment owner', () => {
+    it('only shows edit and delete actions for the latest comment owner', () => {
         render(
             <CommentsPanel
                 currentUserEmail="show@test.com"
                 comments={[
                     { id: '1', createdByName: 'show', createdByEmail: 'show@test.com', content: '這段我來改' },
                     { id: '2', createdByName: 'doris', createdByEmail: 'doris@test.com', content: '我先補資料' },
+                    { id: '3', createdByName: 'show', createdByEmail: 'show@test.com', content: '最新一筆我來收尾' },
                 ]}
             />
         );
 
         expect(screen.getByRole('button', { name: '編輯留言' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '刪除留言' })).toBeInTheDocument();
-        expect(screen.getAllByText('這段我來改')).toHaveLength(1);
-        expect(screen.queryByRole('button', { name: '編輯留言', hidden: true })).toBeInTheDocument();
+        expect(screen.getByText('最新一筆我來收尾')).toBeInTheDocument();
         expect(screen.getAllByRole('button', { name: '編輯留言' })).toHaveLength(1);
         expect(screen.getAllByRole('button', { name: '刪除留言' })).toHaveLength(1);
+    });
+
+    it('does not show edit and delete actions for an older comment even if it belongs to the current user', () => {
+        render(
+            <CommentsPanel
+                currentUserEmail="show@test.com"
+                comments={[
+                    { id: '1', createdByName: 'show', createdByEmail: 'show@test.com', content: '我先留言' },
+                    { id: '2', createdByName: 'doris', createdByEmail: 'doris@test.com', content: '我補最新進度' },
+                ]}
+            />
+        );
+
+        expect(screen.queryByRole('button', { name: '編輯留言' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: '刪除留言' })).not.toBeInTheDocument();
     });
 
     it('allows the comment owner to edit with trimmed content', () => {

@@ -55,7 +55,11 @@ const CommentsPanel = ({
                         目前還沒有留言
                     </div>
                 ) : (
-                    comments.map((comment) => (
+                    comments.map((comment, index) => {
+                        const isLatestComment = index === comments.length - 1;
+                        const canManageComment = isLatestComment && comment.createdByEmail === currentUserEmail;
+
+                        return (
                         <article
                             key={comment.id}
                             className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
@@ -69,7 +73,7 @@ const CommentsPanel = ({
                                         <p className="text-xs text-slate-400">{comment.createdAtLabel}</p>
                                     )}
                                 </div>
-                                {comment.createdByEmail === currentUserEmail && (
+                                {canManageComment && (
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
@@ -127,7 +131,8 @@ const CommentsPanel = ({
                                 </p>
                             )}
                         </article>
-                    ))
+                        );
+                    })
                 )}
             </div>
 
