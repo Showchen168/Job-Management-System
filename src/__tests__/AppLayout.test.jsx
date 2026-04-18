@@ -170,7 +170,7 @@ describe('App layout', () => {
         expect(screen.getByTestId('desktop-sidebar-toggle')).toBeInTheDocument();
     });
 
-    it('stacks the collapsed sidebar brand controls vertically to keep the spacing balanced', async () => {
+    it('keeps the collapsed sidebar brand controls in a compact horizontal row', async () => {
         render(<App />);
 
         await waitFor(() => {
@@ -179,7 +179,9 @@ describe('App layout', () => {
 
         fireEvent.click(screen.getByTestId('desktop-sidebar-toggle'));
 
-        expect(screen.getByTestId('sidebar-brand-header')).toHaveClass('flex-col');
+        expect(screen.getByTestId('sidebar-brand-header')).toHaveClass('justify-between');
+        expect(screen.getByTestId('sidebar-header-actions')).toHaveClass('flex-1', 'justify-end');
+        expect(screen.getByTestId('desktop-sidebar-toggle')).toHaveClass('p-1.5');
     });
 
     it('shows the locale switcher in the top-right header actions without extra locale label text', async () => {

@@ -6,7 +6,7 @@ import * as OpenCC from 'opencc-js';
 import {
     CheckCircle2, AlertCircle, Users, Settings, Database,
     LogOut, Loader2, ShieldCheck, ShieldAlert, Menu, X, Clock,
-    LayoutDashboard, PanelsTopLeft, PanelLeftClose, PanelLeftOpen
+    LayoutDashboard, PanelsTopLeft, PanelLeftClose, PanelLeftOpen, ChevronRight
 } from 'lucide-react';
 
 import { DEFAULT_CONFIG, ROOT_ADMINS, SYSTEM_CREATOR, APP_VERSION, LOCALE_STORAGE_KEY, DEFAULT_LOCALE } from './constants';
@@ -554,8 +554,8 @@ const App = () => {
                             <X size={18} />
                         </button>
                     </div>
-                    <div data-testid="sidebar-brand-panel" className={`border-b border-black/10 ${isSidebarCollapsed ? 'px-2.5 py-3' : 'px-4 py-4'}`}>
-                        <div data-testid="sidebar-brand-header" className={`flex min-w-0 items-center gap-3 ${isSidebarCollapsed ? 'flex-col justify-center' : 'justify-between'}`}>
+                    <div data-testid="sidebar-brand-panel" className={`border-b border-black/10 ${isSidebarCollapsed ? 'px-2 py-3' : 'px-4 py-4'}`}>
+                        <div data-testid="sidebar-brand-header" className={`flex min-w-0 items-center ${isSidebarCollapsed ? 'justify-between gap-2' : 'justify-between gap-3'}`}>
                             <div className={`flex min-w-0 items-center ${isSidebarCollapsed ? 'justify-center' : 'flex-1 gap-3'}`}>
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#d6e7fb] bg-[#eef6ff] text-[#0075de]">
                                     <Database size={18} />
@@ -568,18 +568,18 @@ const App = () => {
                             </div>
                             <div
                                 data-testid="sidebar-header-actions"
-                                className={`flex shrink-0 items-center justify-center ${isSidebarCollapsed ? 'w-full' : 'gap-2'}`}
+                                className={`flex shrink-0 items-center ${isSidebarCollapsed ? 'flex-1 justify-end' : 'justify-center gap-2'}`}
                             >
                                 {!isMobileViewport && (
                                     <button
                                         type="button"
                                         aria-label={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
                                         title={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
-                                        className="shrink-0 rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                                        className={`shrink-0 rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700 ${isSidebarCollapsed ? 'p-1.5' : 'p-2'}`}
                                         onClick={() => setIsDesktopSidebarCollapsed((current) => !current)}
                                         data-testid="desktop-sidebar-toggle"
                                     >
-                                        {isDesktopSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                                        {isDesktopSidebarCollapsed ? <ChevronRight size={12} /> : <PanelLeftClose size={16} />}
                                     </button>
                                 )}
                             </div>
