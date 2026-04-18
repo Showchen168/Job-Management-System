@@ -23,7 +23,7 @@ def stop_static_server(server):
     server.server_close()
 
 
-def test_firebase_status_and_login_display():
+def test_login_display_without_firebase_status():
     playwright = pytest.importorskip("playwright.sync_api")
     expect = playwright.expect
     sync_playwright = playwright.sync_playwright
@@ -37,7 +37,7 @@ def test_firebase_status_and_login_display():
                 wait_until="networkidle",
             )
             expect(page.get_by_test_id("app-shell")).to_be_visible()
-            expect(page.get_by_test_id("firebase-status")).to_contain_text("測試模式")
+            expect(page.get_by_test_id("firebase-status")).to_have_count(0)
             expect(page.get_by_test_id("user-display-name")).to_have_text("playwright")
             browser.close()
     finally:

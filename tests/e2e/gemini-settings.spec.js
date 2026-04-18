@@ -9,7 +9,7 @@ test('系統設定可更新 Gemini API Key 並產生截圖', async ({ page }) =>
   const testAdminEmail = process.env.TEST_ADMIN_EMAIL;
   test.skip(!testAdminEmail, '需要設定 TEST_ADMIN_EMAIL 以進入系統設定');
 
-  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
+  await page.goto(`index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
 
   await page.getByRole('button', { name: '系統設定' }).click();
 

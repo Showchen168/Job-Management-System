@@ -119,4 +119,26 @@ describe('App layout', () => {
 
         expect(screen.getByTestId('workspace-content-shell')).toHaveClass('pt-0');
     });
+
+    it('does not render the firebase connection status badge', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByTestId('firebase-status')).not.toBeInTheDocument();
+    });
+
+    it('keeps the sidebar brand title on a single line when space is tight', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('sidebar-brand-header')).toHaveClass('min-w-0');
+        expect(screen.getByTestId('sidebar-brand-title')).toHaveClass('truncate', 'whitespace-nowrap');
+        expect(screen.getByTestId('sidebar-brand-version')).toHaveClass('shrink-0', 'whitespace-nowrap');
+    });
 });

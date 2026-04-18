@@ -42,7 +42,6 @@ const App = () => {
     const [auth, setAuth] = useState(null);
     const [user, setUser] = useState(null);
     const [error, setError] = useState(null);
-    const [connectionStatus, setConnectionStatus] = useState('初始化中...');
     const [isAuthChecking, setIsAuthChecking] = useState(true);
     const [cloudAdmins, setCloudAdmins] = useState([]);
     const [cloudEditors, setCloudEditors] = useState([]);
@@ -83,7 +82,6 @@ const App = () => {
         if (testConfig.enabled) {
             if (testConfig.forceAuthPage) {
                 setUser(null);
-                setConnectionStatus('測試模式');
                 setIsAuthChecking(false);
                 return;
             }
@@ -95,7 +93,6 @@ const App = () => {
             } else {
                 setUser({ uid: 'test-mode', email: testConfig.userEmail || null });
             }
-            setConnectionStatus('測試模式');
             setIsAuthChecking(false);
             return;
         }
@@ -114,7 +111,6 @@ const App = () => {
                 setAppInstance(app);
                 setAuth(authInstance);
                 setDb(dbInstance);
-                setConnectionStatus(navigator.onLine ? '連線中...' : '離線');
                 onAuthStateChanged(authInstance, (u) => {
                     setUser(u);
                     setIsAuthChecking(false);
@@ -122,7 +118,6 @@ const App = () => {
             } catch (err) {
                 logger.error("Firebase Init Error:", err);
                 setError(`連線錯誤: ${err.message}`);
-                setConnectionStatus('連線錯誤');
                 setIsAuthChecking(false);
             }
         };
@@ -153,36 +148,6 @@ const App = () => {
         observer.observe(document.body, { childList: true, subtree: true, characterData: true });
         return () => observer.disconnect();
     }, [locale]);
-
-    // Firestore connection status
-    useEffect(() => {
-        if (!db || testConfig.enabled) return;
-        const statusRef = doc(db, 'artifacts', 'work-tracker-v1', 'public', 'data', 'settings', 'connection');
-        const unsubscribe = onSnapshot(
-            statusRef,
-            { includeMetadataChanges: true },
-            (docSnap) => {
-                if (docSnap.metadata.fromCache) {
-                    setConnectionStatus(navigator.onLine ? '離線（快取）' : '離線');
-                } else {
-                    setConnectionStatus('已連線');
-                }
-            },
-            (err) => {
-                logger.error("Firebase Connection Error:", err);
-                setConnectionStatus('連線錯誤');
-            }
-        );
-        const handleOnline = () => setConnectionStatus('連線中...');
-        const handleOffline = () => setConnectionStatus('離線');
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-        return () => {
-            unsubscribe();
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, [db, testConfig.enabled]);
 
     // Cloud admins subscription
     useEffect(() => {
@@ -351,12 +316,6 @@ const App = () => {
         if (activeTab === 'settings') return '系統設定';
         return '工作紀錄中心';
     }, [activeTab]);
-    const connectionIndicatorClass = useMemo(() => {
-        if (connectionStatus.includes('已連線')) return 'bg-emerald-400';
-        if (connectionStatus.includes('離線')) return 'bg-red-400';
-        if (connectionStatus.includes('測試模式')) return 'bg-amber-400';
-        return 'bg-slate-400';
-    }, [connectionStatus]);
     const unreadCommentCountMap = useMemo(
         () => buildUnreadCommentCountMap(notifications),
         [notifications]
@@ -517,7 +476,7 @@ const App = () => {
     }
 
     if (!user) {
-        return <AuthPage auth={auth} error={error} connectionStatus={connectionStatus} />;
+        return <AuthPage auth={auth} error={error} />;
     }
 
     const isNewUserWithoutTeam = !isUserAdmin && !isUserEditor && !checkIsInAnyTeam(user, teams);
@@ -573,13 +532,13 @@ const App = () => {
                         </button>
                     </div>
                     <div className="p-6">
-                        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3`}>
-                            <h1 className={`flex items-center text-2xl font-bold tracking-[-0.04em] text-slate-900 ${isSidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
-                                <Database className="text-[#0075de]" />
+                        <div data-testid="sidebar-brand-header" className={`flex min-w-0 items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} gap-3`}>
+                            <h1 className={`flex min-w-0 items-center text-2xl font-bold tracking-[-0.04em] text-slate-900 ${isSidebarCollapsed ? 'justify-center' : 'flex-1 gap-2'}`}>
+                                <Database className="shrink-0 text-[#0075de]" />
                                 {!isSidebarCollapsed && (
                                     <>
-                                        <span>工作紀錄中心</span>
-                                        <span className="text-xs font-normal text-slate-400">{APP_VERSION}</span>
+                                        <span data-testid="sidebar-brand-title" className="truncate whitespace-nowrap">工作紀錄中心</span>
+                                        <span data-testid="sidebar-brand-version" className="shrink-0 whitespace-nowrap text-xs font-normal text-slate-400">{APP_VERSION}</span>
                                     </>
                                 )}
                             </h1>
@@ -588,17 +547,13 @@ const App = () => {
                                     type="button"
                                     aria-label={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
                                     title={isDesktopSidebarCollapsed ? '展開側邊欄' : '折疊側邊欄'}
-                                    className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                                     onClick={() => setIsDesktopSidebarCollapsed((current) => !current)}
                                     data-testid="desktop-sidebar-toggle"
                                 >
                                     {isDesktopSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
                                 </button>
                             )}
-                        </div>
-                        <div className={`mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] text-slate-500 shadow-sm ${isSidebarCollapsed ? 'justify-center px-2' : ''}`} data-testid="firebase-status">
-                            <span className={`inline-block h-2 w-2 rounded-full ${connectionIndicatorClass}`} />
-                            {!isSidebarCollapsed && <span>Firebase 連線狀態：{connectionStatus}</span>}
                         </div>
                     </div>
                     <nav className={`flex-1 space-y-2 pb-4 ${isSidebarCollapsed ? 'px-3' : 'px-4'}`} aria-label="主要導覽">

@@ -9,7 +9,7 @@ import {
 import { AlertCircle, Database, Loader2, CheckCircle2 } from 'lucide-react';
 import logger from '../utils/logger';
 
-const AuthPage = ({ auth, error, connectionStatus }) => {
+const AuthPage = ({ auth, error }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [emailPrefix, setEmailPrefix] = useState('');
@@ -130,10 +130,6 @@ const AuthPage = ({ auth, error, connectionStatus }) => {
                         </div>
                         <h1 className="text-2xl font-bold tracking-[-0.03em] text-white">工作紀錄中心</h1>
                         <p className="mt-2 text-sm text-[#d4d0cc]">請登入以存取您的工作資料</p>
-                        <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/8 px-3 py-1 text-xs text-[#ebe7e2]" data-testid="firebase-status-auth">
-                            <span className="inline-block h-2 w-2 rounded-full bg-[#62aef0]" />
-                            Firebase 連線狀態：{connectionStatus}
-                        </p>
                     </div>
                     <div className="mx-auto w-full max-w-md">
                         <div className="p-8">

@@ -9,7 +9,7 @@ test('顯示郵件通知設定區塊', async ({ page }) => {
   const testAdminEmail = process.env.TEST_ADMIN_EMAIL;
   test.skip(!testAdminEmail, '需要設定 TEST_ADMIN_EMAIL 以進入系統設定');
 
-  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
+  await page.goto(`index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
 
   await page.getByRole('button', { name: '系統設定' }).click();
 
@@ -31,7 +31,7 @@ test('負責人欄位顯示已註冊使用者下拉選單', async ({ page }) => 
   const testAdminEmail = process.env.TEST_ADMIN_EMAIL;
   test.skip(!testAdminEmail, '需要設定 TEST_ADMIN_EMAIL 以進入系統設定');
 
-  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}&testAssignees=alice,bob`);
+  await page.goto(`index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}&testAssignees=alice,bob`);
 
   await page.getByRole('button', { name: '新增' }).click();
 
@@ -44,7 +44,7 @@ test('手動發送通知需先完成 EmailJS 設定', async ({ page }) => {
   const testAdminEmail = process.env.TEST_ADMIN_EMAIL;
   test.skip(!testAdminEmail, '需要設定 TEST_ADMIN_EMAIL 以進入系統設定');
 
-  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
+  await page.goto(`index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
 
   await page.getByRole('button', { name: '系統設定' }).click();
 
@@ -61,7 +61,7 @@ test('已註冊使用者列表標題顯示', async ({ page }) => {
   const testAdminEmail = process.env.TEST_ADMIN_EMAIL;
   test.skip(!testAdminEmail, '需要設定 TEST_ADMIN_EMAIL 以進入系統設定');
 
-  await page.goto(`/index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
+  await page.goto(`index.html?testMode=1&testUserEmail=${encodeURIComponent(testAdminEmail)}`);
 
   await page.getByRole('button', { name: '系統設定' }).click();
 
