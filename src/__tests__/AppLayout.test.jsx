@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom';
 import React from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from '../App';
 
 vi.mock('firebase/app', () => ({
@@ -168,6 +168,18 @@ describe('App layout', () => {
         });
 
         expect(screen.getByTestId('desktop-sidebar-toggle')).toBeInTheDocument();
+    });
+
+    it('stacks the collapsed sidebar brand controls vertically to keep the spacing balanced', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByTestId('desktop-sidebar-toggle'));
+
+        expect(screen.getByTestId('sidebar-brand-header')).toHaveClass('flex-col');
     });
 
     it('shows the locale switcher in the top-right header actions without extra locale label text', async () => {

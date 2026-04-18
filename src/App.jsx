@@ -554,8 +554,8 @@ const App = () => {
                             <X size={18} />
                         </button>
                     </div>
-                    <div data-testid="sidebar-brand-panel" className={`border-b border-black/10 ${isSidebarCollapsed ? 'px-3 py-4' : 'px-4 py-4'}`}>
-                        <div data-testid="sidebar-brand-header" className="flex min-w-0 items-center justify-between gap-3">
+                    <div data-testid="sidebar-brand-panel" className={`border-b border-black/10 ${isSidebarCollapsed ? 'px-2.5 py-3' : 'px-4 py-4'}`}>
+                        <div data-testid="sidebar-brand-header" className={`flex min-w-0 items-center gap-3 ${isSidebarCollapsed ? 'flex-col justify-center' : 'justify-between'}`}>
                             <div className={`flex min-w-0 items-center ${isSidebarCollapsed ? 'justify-center' : 'flex-1 gap-3'}`}>
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#d6e7fb] bg-[#eef6ff] text-[#0075de]">
                                     <Database size={18} />
@@ -568,7 +568,7 @@ const App = () => {
                             </div>
                             <div
                                 data-testid="sidebar-header-actions"
-                                className={`flex shrink-0 items-center ${isSidebarCollapsed ? 'flex-col gap-2' : 'gap-2'}`}
+                                className={`flex shrink-0 items-center justify-center ${isSidebarCollapsed ? 'w-full' : 'gap-2'}`}
                             >
                                 {!isMobileViewport && (
                                     <button
