@@ -317,9 +317,7 @@ const App = () => {
         return '工作紀錄中心';
     }, [activeTab]);
 
-    const workspaceContentShellClassName = activeTab === 'team-board'
-        ? 'w-full max-w-none px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0'
-        : 'mx-auto max-w-7xl px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0';
+    const workspaceContentShellClassName = 'w-full max-w-none px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0';
     const unreadCommentCountMap = useMemo(
         () => buildUnreadCommentCountMap(notifications),
         [notifications]

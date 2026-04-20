@@ -196,20 +196,31 @@ describe('App layout', () => {
         expect(screen.queryByText('語系')).not.toBeInTheDocument();
     });
 
-    it('removes the fixed content width cap on the team board page', async () => {
+    it('keeps the main workspace shell fluid on dashboard by default', async () => {
         render(<App />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: '團隊看板' })).toBeInTheDocument();
+            expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
         });
 
-        fireEvent.click(screen.getByRole('button', { name: '團隊看板' }));
+        expect(screen.getByTestId('workspace-content-shell')).toHaveClass('w-full', 'max-w-none');
+        expect(screen.getByTestId('workspace-content-shell')).not.toHaveClass('mx-auto', 'max-w-7xl');
+    });
 
-        await waitFor(() => {
-            expect(screen.getByTestId('team-board-page')).toBeInTheDocument();
-        });
+    it('removes the fixed content width cap across the main pages', async () => {
+        render(<App />);
 
-        expect(screen.getByTestId('workspace-content-shell')).toHaveClass('max-w-none');
-        expect(screen.getByTestId('workspace-content-shell')).not.toHaveClass('max-w-7xl');
+        const pageButtons = ['數據看板', '待辦事項', '問題管理', '會議記錄', '團隊看板'];
+
+        for (const label of pageButtons) {
+            fireEvent.click(screen.getByRole('button', { name: label }));
+
+            await waitFor(() => {
+                expect(screen.getByTestId('workspace-content-shell')).toBeInTheDocument();
+            });
+
+            expect(screen.getByTestId('workspace-content-shell')).toHaveClass('w-full', 'max-w-none');
+            expect(screen.getByTestId('workspace-content-shell')).not.toHaveClass('mx-auto', 'max-w-7xl');
+        }
     });
 });
