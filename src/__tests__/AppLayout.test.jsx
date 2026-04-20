@@ -195,4 +195,21 @@ describe('App layout', () => {
         expect(screen.queryByTestId('locale-toggle')).not.toBeInTheDocument();
         expect(screen.queryByText('語系')).not.toBeInTheDocument();
     });
+
+    it('removes the fixed content width cap on the team board page', async () => {
+        render(<App />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: '團隊看板' })).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: '團隊看板' }));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('team-board-page')).toBeInTheDocument();
+        });
+
+        expect(screen.getByTestId('workspace-content-shell')).toHaveClass('max-w-none');
+        expect(screen.getByTestId('workspace-content-shell')).not.toHaveClass('max-w-7xl');
+    });
 });

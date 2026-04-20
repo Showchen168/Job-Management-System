@@ -316,6 +316,10 @@ const App = () => {
         if (activeTab === 'settings') return '系統設定';
         return '工作紀錄中心';
     }, [activeTab]);
+
+    const workspaceContentShellClassName = activeTab === 'team-board'
+        ? 'w-full max-w-none px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0'
+        : 'mx-auto max-w-7xl px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0';
     const unreadCommentCountMap = useMemo(
         () => buildUnreadCommentCountMap(notifications),
         [notifications]
@@ -671,7 +675,7 @@ const App = () => {
                         </div>
                     </div>
                 </div>
-                <div className="mx-auto max-w-7xl px-4 pb-4 pt-0 md:px-8 md:pb-8 md:pt-0" data-testid="workspace-content-shell">
+                <div className={workspaceContentShellClassName} data-testid="workspace-content-shell">
                     {activeTab === 'dashboard' && canAccessDashboard && <Dashboard db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} />}
                     {activeTab === 'tasks' && (
                         <TaskManager db={db} user={user} canAccessAll={isUserPrivileged} isAdmin={isUserAdmin} testConfig={testConfig} teams={teams} focusTarget={focusTarget} onFocusHandled={() => setFocusTarget(null)} demoMode={testConfig.demo} demoState={demoState} onDemoStateChange={handleDemoStateChange} unreadCommentCountMap={unreadCommentCountMap} permissionContext={permissionContext} />

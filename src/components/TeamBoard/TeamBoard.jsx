@@ -50,6 +50,11 @@ const TeamBoard = ({
     });
     const suppressBoardClickRef = useRef(false);
 
+    const isInteractiveBoardTarget = (target) => (
+        target instanceof Element
+        && Boolean(target.closest('button, a, input, select, textarea, [role="button"], [data-board-interactive="true"]'))
+    );
+
     const safelyTogglePointerCapture = (target, methodName, pointerId) => {
         if (!target || pointerId === null || typeof pointerId === 'undefined') {
             return;
@@ -223,6 +228,9 @@ const TeamBoard = ({
         if (typeof event.button === 'number' && event.button !== 0) {
             return;
         }
+        if (isInteractiveBoardTarget(event.target)) {
+            return;
+        }
 
         boardDragStateRef.current = {
             active: true,
@@ -278,9 +286,9 @@ const TeamBoard = ({
             onLostPointerCapture={(event) => endBoardDrag(event.currentTarget)}
             onClickCapture={handleBoardClickCapture}
         >
-            <div className="flex min-w-max gap-5">
+            <div className="flex w-full min-w-fit gap-5">
                 {columnSet.map((column) => (
-                    <section key={`${archived ? 'archived' : 'active'}-${column.memberEmail}`} className={`w-[19rem] flex-shrink-0 rounded-[28px] border border-[color:var(--border-soft)] p-4 shadow-sm ${archived ? 'bg-slate-50/80 opacity-85' : 'bg-[linear-gradient(180deg,#ffffff_0%,#fbfaf8_100%)]'}`}>
+                    <section key={`${archived ? 'archived' : 'active'}-${column.memberEmail}`} className={`min-w-[19rem] flex-1 rounded-[28px] border border-[color:var(--border-soft)] p-4 shadow-sm ${archived ? 'bg-slate-50/80 opacity-85' : 'bg-[linear-gradient(180deg,#ffffff_0%,#fbfaf8_100%)]'}`}>
                         <header className="mb-4 flex items-center justify-between gap-3">
                             <div>
                                 <h3 className="text-base font-semibold text-slate-900">{column.memberName}</h3>

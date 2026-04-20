@@ -85,6 +85,20 @@ describe('TeamBoard', () => {
         expect(within(dialog).getByText('先調整桌機 spacing')).toBeInTheDocument();
     });
 
+    it('still opens the preview when pointer events start from the card itself', () => {
+        render(<TeamBoard {...baseProps} />);
+
+        const card = screen.getByRole('button', { name: /留言區高度太擠/i });
+        const scroller = screen.getByTestId('team-board-column-scroller');
+
+        fireEvent.pointerDown(card, { clientX: 200, pointerId: 1, button: 0 });
+        fireEvent.pointerMove(scroller, { clientX: 194, pointerId: 1 });
+        fireEvent.pointerUp(scroller, { pointerId: 1 });
+        fireEvent.click(card);
+
+        expect(screen.getByRole('dialog', { name: '問題內容視窗' })).toBeInTheDocument();
+    });
+
     it('allows dragging the board left and right with the mouse', () => {
         render(<TeamBoard {...baseProps} />);
 
@@ -121,5 +135,18 @@ describe('TeamBoard', () => {
         expect(dialog).toBeInTheDocument();
         expect(within(dialog).getByText('進度摘要')).toBeInTheDocument();
         expect(within(dialog).getByText('已完成驗收')).toBeInTheDocument();
+    });
+
+    it('lets columns stretch on wide screens instead of staying fixed-width', () => {
+        render(<TeamBoard {...baseProps} />);
+
+        const scroller = screen.getByTestId('team-board-column-scroller');
+        const row = scroller.firstElementChild;
+        const firstColumn = row?.firstElementChild;
+
+        expect(row).toHaveClass('w-full');
+        expect(row).not.toHaveClass('min-w-max');
+        expect(firstColumn).toHaveClass('min-w-[19rem]', 'flex-1');
+        expect(firstColumn).not.toHaveClass('w-[19rem]', 'flex-shrink-0');
     });
 });
